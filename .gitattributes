@@ -1,18 +1,11 @@
-# Unreal Engine 4 large binary assets
+# Unreal Engine large binary assets managed by Git LFS
 
 *.uasset filter=lfs diff=lfs merge=lfs -text
-*.umap   filter=lfs diff=lfs merge=lfs -text
+*.umap filter=lfs diff=lfs merge=lfs -text
 
-# 常見大型二進位檔，也可以視專案需求調整
-*.fbx    filter=lfs diff=lfs merge=lfs -text
-*.png    filter=lfs diff=lfs merge=lfs -text
-*.tga    filter=lfs diff=lfs merge=lfs -text
-*.wav    filter=lfs diff=lfs merge=lfs -text
-*.mp4    filter=lfs diff=lfs merge=lfs -text
-
-# 編譯產物通常不放入版本控制
-Binaries/** filter=lfs diff=lfs merge=lfs -text
-Build/**   filter=lfs diff=lfs merge=lfs -text
-DerivedDataCache/** filter=lfs diff=lfs merge=lfs -text
-Intermediate/** filter=lfs diff=lfs merge=lfs -text
-Saved/** filter=lfs diff=lfs merge=lfs -text
+# Common large binary files
+*.fbx filter=lfs diff=lfs merge=lfs -text
+*.png filter=lfs diff=lfs merge=lfs -text
+*.tga filter=lfs diff=lfs merge=lfs -text
+*.wav filter=lfs diff=lfs merge=lfs -text
+*.mp4 filter=lfs diff=lfs merge=lfs -text
