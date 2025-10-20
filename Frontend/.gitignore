@@ -15,6 +15,9 @@ dist-ssr
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
 .idea
 .DS_Store
 *.suo
@@ -48,7 +51,7 @@ coverage/
 *.tmp
 *.temp
 
-# IDE - VSCode
+# IDE - VSCode (保留常用設定)
 .vscode/
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -59,7 +62,7 @@ coverage/
 Thumbs.db
 ehthumbs.db
 
-# Vue specific
+# Vue 3 + Vite specific
 *.vuepress/dist
 .nuxt
 .output
@@ -81,9 +84,95 @@ ehthumbs.db
 # pnpm
 .pnpm-debug.log*
 
+# Bun (當前專案使用的套件管理器)
+.bun
+
 # Package manager lockfiles
-# Uncomment the one you're not using
+# 根據使用的套件管理器取消註釋對應的鎖定文件
 # npm-lockfile
 # yarn.lock
 # pnpm-lock.yaml
-# bun.lockb
+bun.lockb
+
+# TypeScript
+*.tsbuildinfo
+
+# Testing
+coverage/
+.nyc_output/
+
+# Storybook build outputs
+storybook-static/
+
+# Temporary folders
+tmp/
+temp/
+
+# Editor directories and files (備用)
+*.sublime-workspace
+*.sublime-project
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env.test
+
+# parcel-bundler cache (https://parceljs.org/)
+.parcel-cache
+
+# Next.js build output
+.next
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Gatsby files
+.cache/
+public
+
+# vuepress build output
+.vuepress/dist
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# Local Netlify folder
+.netlify
+
+# Vue 相關
+.vue
+
+# Vite 開發服務器日誌
+*.dev.log
