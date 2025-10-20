@@ -63,4 +63,4 @@ AutoWarehouse/Saved/
 AutoWarehouse/Plugins/**/Binaries/
 AutoWarehouse/Plugins/**/Intermediate/
 
-Frontend/node_modules
+Frontend/node_modules/*
