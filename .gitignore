@@ -62,3 +62,5 @@ AutoWarehouse/DerivedDataCache/
 AutoWarehouse/Saved/
 AutoWarehouse/Plugins/**/Binaries/
 AutoWarehouse/Plugins/**/Intermediate/
+
+Frontend/node_modules
