@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # UE4.27 WebSocket Bridge Demo Startup Script
-# 使用 bun 啟動整個演示環境
+# 使用 bun 啟動整個演示環境 (Vue.js 前端版本)
 
 echo "🚀 Starting UE4.27 WebSocket Bridge Demo..."
 
@@ -38,11 +38,11 @@ BACKEND_PID=$!
 
 cd ..
 
-echo "🎨 Starting SvelteKit Frontend..."
+echo "🎨 Starting Vue.js Frontend..."
 cd Frontend
 
 # 啟動前端開發服務器（在背景執行）
-echo "⚡ Starting development server on port 5173..."
+echo "⚡ Starting Vue.js development server on port 5173..."
 bun run dev &
 FRONTEND_PID=$!
 
