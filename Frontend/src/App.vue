@@ -1,39 +1,65 @@
 <template>
   <div class="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-6">
     <div class="max-w-7xl mx-auto">
-      <!-- 標題 -->
+      <!-- 標題和連線狀態 -->
       <div class="bg-white rounded-2xl shadow-xl p-6 mb-6">
-        <h1 class="text-3xl font-bold text-center bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          倉儲訂單系統
-        </h1>
-        <p class="text-center text-gray-600 mt-2">Order Management System</p>
+        <div class="flex justify-between items-center">
+          <div>
+            <h1 class="text-3xl font-bold text-center bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              倉儲訂單系統
+            </h1>
+            <p class="text-center text-gray-600 mt-2">Order Management System</p>
+          </div>
+
+          <!-- 連線狀態 -->
+          <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2">
+              <div class="w-3 h-3 rounded-full" :class="isConnected ? 'bg-green-500' : 'bg-red-500'"></div>
+              <span class="text-sm font-medium" :class="isConnected ? 'text-green-600' : 'text-red-600'">
+                {{ isConnected ? '已連線' : '未連線' }}
+              </span>
+            </div>
+            <button
+              @click="toggleConnection"
+              :class="isConnected ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'"
+              class="px-4 py-2 text-white rounded-lg transition-all duration-300 font-medium"
+            >
+              {{ isConnected ? '斷開連線' : '連線後端' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 連線資訊 -->
+        <div v-if="errorMessage" class="mt-4 p-3 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-lg">
+          {{ errorMessage }}
+        </div>
       </div>
 
       <!-- 主要內容區 -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <!-- 左側：訊息/訂單歷史 -->
+        <!-- 左側：訂單歷史 -->
         <div class="bg-white rounded-2xl shadow-xl p-6">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-xl font-bold text-gray-800">訂單歷史</h2>
-            <button 
+            <button
               @click="clearOrders"
               class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-300 text-sm font-medium"
             >
               清空
             </button>
           </div>
-          
+
           <div class="space-y-3 max-h-[600px] overflow-y-auto">
-            <div 
+            <div
               v-if="orders.length === 0"
               class="text-center py-12 text-gray-400"
             >
               <p class="text-lg">暫無訂單</p>
               <p class="text-sm mt-2">請在右側建立新訂單</p>
             </div>
-            
-            <div 
-              v-for="order in orders" 
+
+            <div
+              v-for="order in orders"
               :key="order.id"
               class="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border-l-4 border-blue-500 hover:shadow-lg transition-all duration-300"
             >
@@ -51,32 +77,32 @@
         <!-- 右側：訂單發送 -->
         <div class="bg-white rounded-2xl shadow-xl p-6">
           <h2 class="text-xl font-bold text-gray-800 mb-4">訂單發送</h2>
-          
+
           <!-- 數字輸入區 -->
           <div class="mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-2">輸入數字</label>
             <div class="flex flex-wrap gap-2 p-4 bg-gray-50 rounded-xl border-2 border-gray-300 min-h-[120px]">
-              <div 
-                v-for="(num, index) in numbers" 
+              <div
+                v-for="(num, index) in numbers"
                 :key="index"
                 class="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-md border-2 border-blue-300"
               >
-                <input 
+                <input
                   v-model.number="numbers[index]"
                   type="number"
                   class="w-20 text-center font-bold text-lg text-blue-600 focus:outline-none"
                   min="0"
                   max="999"
                 />
-                <button 
+                <button
                   @click="removeNumber(index)"
                   class="text-red-500 hover:text-red-700 font-bold"
                 >
                   ✕
                 </button>
               </div>
-              
-              <button 
+
+              <button
                 @click="addNumber"
                 class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all duration-300 font-bold shadow-md"
               >
@@ -97,14 +123,14 @@
 
           <!-- 操作按鈕 -->
           <div class="grid grid-cols-2 gap-4">
-            <button 
+            <button
               @click="generateRandom"
               class="px-6 py-4 bg-gradient-to-r from-orange-500 to-yellow-500 text-white rounded-xl hover:from-orange-600 hover:to-yellow-600 transition-all duration-300 transform hover:scale-105 shadow-lg font-bold text-lg"
             >
               🎲 隨機生成
             </button>
-            
-            <button 
+
+            <button
               @click="submitOrder"
               :disabled="numbers.length === 0"
               class="px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 shadow-lg font-bold text-lg"
@@ -117,19 +143,19 @@
           <div class="mt-6 pt-6 border-t-2 border-gray-200">
             <label class="block text-sm font-medium text-gray-700 mb-3">快速操作</label>
             <div class="flex gap-2 flex-wrap">
-              <button 
+              <button
                 @click="clearNumbers"
                 class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 font-medium"
               >
                 清空數字
               </button>
-              <button 
+              <button
                 @click="addMultipleNumbers(3)"
                 class="px-4 py-2 bg-blue-200 text-blue-700 rounded-lg hover:bg-blue-300 transition-all duration-300 font-medium"
               >
                 新增3個
               </button>
-              <button 
+              <button
                 @click="addMultipleNumbers(5)"
                 class="px-4 py-2 bg-purple-200 text-purple-700 rounded-lg hover:bg-purple-300 transition-all duration-300 font-medium"
               >
@@ -144,42 +170,178 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+
+// WebSocket 連線狀態
+const isConnected = ref(false)
+const errorMessage = ref('')
+let websocket = null
+
+// 清空狀態標誌
+const isClearing = ref(false)
 
 // 數字列表
 const numbers = ref([10, 20, 30])
 
-// 訂單列表
-const orders = ref([
-  { id: 1, content: '10-20-5-3', time: new Date().toLocaleTimeString() }
-])
+// 訂單列表 - 初始化為空數組，完全依賴後端
+const orders = ref([])
 
-// 訂單計數器
-const orderCounter = ref(2)
+// 訂單計數器 - 初始化為1，完全依賴後端
+const orderCounter = ref(1)
 
-// 新增數字
+// 保存訂單到 localStorage（保留備用，但前端不會主動調用）
+const saveOrders = () => {
+  // 不再使用 localStorage，完全依賴後端
+  console.log('Frontend no longer uses localStorage for orders')
+}
+
+// WebSocket 連線管理
+const connectWebSocket = () => {
+  try {
+    websocket = new WebSocket('ws://localhost:8000')
+
+    websocket.onopen = () => {
+      console.log('Connected to WebSocket server')
+      isConnected.value = true
+      errorMessage.value = ''
+
+      // 如果正在清空過程中，不要請求訂單列表，等待後端確認
+      if (!isClearing.value) {
+        sendMessage({
+          type: 'get_orders',
+          timestamp: new Date().toISOString()
+        })
+      } else {
+        // 如果正在清空過程中重新連線，請求訂單列表確認清空狀態
+        sendMessage({
+          type: 'get_orders',
+          timestamp: new Date().toISOString()
+        })
+      }
+    }
+
+    websocket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data)
+        handleMessage(message)
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error)
+      }
+    }
+
+    websocket.onclose = () => {
+      console.log('WebSocket connection closed')
+      isConnected.value = false
+      errorMessage.value = '連線已斷開'
+      isClearing.value = false // 連線斷開時重置清空標誌
+    }
+
+    websocket.onerror = (error) => {
+      console.error('WebSocket error:', error)
+      errorMessage.value = '連線錯誤'
+      isConnected.value = false
+    }
+
+  } catch (error) {
+    console.error('Failed to create WebSocket connection:', error)
+    errorMessage.value = '無法連接到伺服器'
+  }
+}
+
+const disconnectWebSocket = () => {
+  if (websocket) {
+    websocket.close()
+    websocket = null
+    isConnected.value = false
+  }
+}
+
+const sendMessage = (message) => {
+  if (websocket && websocket.readyState === WebSocket.OPEN) {
+    websocket.send(JSON.stringify(message))
+  }
+}
+
+const handleMessage = (message) => {
+  console.log('Received message:', message)
+
+  switch (message.type) {
+    case 'order_confirmation':
+      console.log('Order confirmed by server:', message.order_id)
+      // 可以顯示確認訊息給用戶
+      break
+
+    case 'new_order':
+      console.log('New order received:', message.order)
+      // 將新訂單添加到本地訂單列表
+      orders.value.unshift({
+        id: message.order.id,
+        content: message.order.content,
+        time: new Date(message.order.timestamp).toLocaleTimeString()
+      })
+      break
+
+    case 'orders_list':
+      console.log('Orders list received:', message.orders)
+      // 更新本地訂單列表
+      orders.value = message.orders.map(order => ({
+        id: order.id,
+        content: order.content,
+        time: new Date(order.timestamp).toLocaleTimeString()
+      }))
+      // 計算下一個訂單 ID（最大訂單 ID + 1）
+      orderCounter.value = message.orders.length > 0 ? Math.max(...message.orders.map(o => o.id)) + 1 : 1
+      break
+
+    case 'status_update':
+      console.log('Status update:', message)
+      // 更新連線狀態資訊
+      break
+
+    case 'orders_cleared':
+      console.log('Orders cleared by server')
+      orders.value = []
+      orderCounter.value = 1
+      isClearing.value = false // 清除清空標誌
+      break
+
+    case 'error':
+      console.error('Server error:', message.message)
+      errorMessage.value = message.message
+      break
+
+    default:
+      console.log('Unhandled message type:', message.type)
+  }
+}
+
+const toggleConnection = () => {
+  if (isConnected.value) {
+    disconnectWebSocket()
+  } else {
+    connectWebSocket()
+  }
+}
+
+// 訂單管理函數
 const addNumber = () => {
   numbers.value.push(0)
 }
 
-// 移除數字
 const removeNumber = (index) => {
   numbers.value.splice(index, 1)
 }
 
-// 清空數字
 const clearNumbers = () => {
   numbers.value = []
 }
 
-// 新增多個數字
 const addMultipleNumbers = (count) => {
   for (let i = 0; i < count; i++) {
     numbers.value.push(0)
   }
 }
 
-// 生成隨機數字
 const generateRandom = () => {
   const count = Math.floor(Math.random() * 5) + 3 // 3-7個數字
   numbers.value = []
@@ -194,34 +356,64 @@ const orderPreview = computed(() => {
   return numbers.value.join('-')
 })
 
-// 送出訂單
 const submitOrder = () => {
   if (numbers.value.length === 0) return
-  
-  const newOrder = {
-    id: orderCounter.value++,
-    content: numbers.value.join('-'),
-    time: new Date().toLocaleTimeString()
-  }
-  
-  orders.value.unshift(newOrder)
-  
-  // 清空輸入
-  numbers.value = []
-  
-  // 可選：限制訂單歷史數量
-  if (orders.value.length > 50) {
-    orders.value = orders.value.slice(0, 50)
+
+  const orderContent = numbers.value.join('-')
+
+  // 發送訂單訊息到後端
+  if (isConnected.value) {
+    sendMessage({
+      type: 'custom_message',
+      content: orderContent,
+      timestamp: new Date().toISOString()
+    })
+
+    // 清空輸入，但不立即添加到本地列表
+    // 後端會通過 new_order 訊息同步回來
+    numbers.value = []
+  } else {
+    // 如果沒有連線，則本地處理（備用模式）
+    const newOrder = {
+      id: orderCounter.value++,
+      content: orderContent,
+      time: new Date().toLocaleTimeString()
+    }
+
+    orders.value.unshift(newOrder)
+    numbers.value = []
+
+    // 可選：限制訂單歷史數量
+    if (orders.value.length > 50) {
+      orders.value = orders.value.slice(0, 50)
+    }
   }
 }
 
-// 清空訂單
 const clearOrders = () => {
+  if (!isConnected.value) {
+    errorMessage.value = '請先連線到後端再清空訂單，否則無法刪除後端資料，刷新後訂單會恢復。';
+    return;
+  }
   if (confirm('確定要清空所有訂單嗎？')) {
-    orders.value = []
-    orderCounter.value = 1
+    isClearing.value = true;
+    orders.value = [];
+    orderCounter.value = 1;
+    sendMessage({
+      type: 'clear_orders',
+      timestamp: new Date().toISOString()
+    });
   }
 }
+
+// 生命週期鉤子
+onMounted(() => {
+  connectWebSocket()
+})
+
+onUnmounted(() => {
+  disconnectWebSocket()
+})
 </script>
 
 <style scoped>

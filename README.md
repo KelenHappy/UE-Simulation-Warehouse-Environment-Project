@@ -95,32 +95,7 @@ Vue.js 前端提供了一個直觀的訂單管理介面：
 ### 訊息類型
 
 #### UE4.27 → 後端
-```json
-{
-  "type": "player_data",
-  "data": {
-    "position": {"x": 0.0, "y": 0.0, "z": 0.0},
-    "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
-    "velocity": {"x": 0.0, "y": 0.0, "z": 0.0}
-  },
-  "timestamp": "2023-12-07T10:30:00Z"
-}
-```
-
-#### 後端 → 所有客戶端
-```json
-{
-  "type": "player_update",
-  "client_id": "ue_client_01",
-  "data": {
-    "position": {"x": 0.0, "y": 0.0, "z": 0.0},
-    "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
-    "velocity": {"x": 0.0, "y": 0.0, "z": 0.0}
-  },
-  "timestamp": "2023-12-07T10:30:00Z"
-}
-```
-
+[Varest](https://github.com/ufna/VaRest/tree/develop?tab=readme-ov-file)  
 ## 🎮 UE4.27 整合指南
 
 ### Blueprint-only 方法
