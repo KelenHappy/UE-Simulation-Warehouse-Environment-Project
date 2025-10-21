@@ -62,5 +62,8 @@ AutoWarehouse/DerivedDataCache/
 AutoWarehouse/Saved/
 AutoWarehouse/Plugins/**/Binaries/
 AutoWarehouse/Plugins/**/Intermediate/
-
+AutoWarehouse/Content
+AutoWarehouse/Content.zip
+AutoWarehouse/Content.7z
+AutoWarehouse/Content.tar.gz
 Frontend/node_modules/*
