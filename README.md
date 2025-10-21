@@ -2,9 +2,9 @@
 
 ### Blueprint-only 方法
 
-請參考 `UE_Client/README_Blueprint_WebSocket.md` 來了解如何在 UE4.27 中創建 WebSocket 客戶端。
-[Content](https://ln5.sync.com/dl/24e7a1010#zij2d27d-xmzrtcty-4k5i63ia-4g6gimfu)
-關鍵步驟：
+請參考 `UE_Client/README_Blueprint_WebSocket.md` 來了解如何在 UE4.27 中創建 WebSocket 客戶端。  
+[Content](https://ln5.sync.com/dl/24e7a1010#zij2d27d-xmzrtcty-4k5i63ia-4g6gimfu)  
+關鍵步驟：  
 1. 創建 Blueprint Actor
 2. 使用 UE4.27 的 WebSocket 節點連接到伺服器
 3. 定期發送玩家位置和動作資料
