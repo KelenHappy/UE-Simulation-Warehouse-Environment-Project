@@ -1,4 +1,5 @@
-# UE4.27 ↔ WebSocket ↔ Vue.js 即時通訊橋接 Demo
+[資源](https://ln5.sync.com/dl/24e7a1010#zij2d27d-xmzrtcty-4k5i63ia-4g6gimfu)
+# UE4.27 ↔ WebSocket ↔ Vue.js 即時通訊橋接 
 
 這個專案展示了如何建立一個完整的即時通訊橋接系統，讓 UE4.27 客戶端能夠與網頁前端進行雙向通訊。現在採用現代化的 Vue.js 前端介面。
 
