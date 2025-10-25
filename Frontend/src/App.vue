@@ -65,7 +65,16 @@
             >
               <div class="flex justify-between items-start mb-2">
                 <span class="font-bold text-gray-800">訂單 {{ order.id }}</span>
-                <span class="text-xs text-gray-500">{{ order.time }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-gray-500">{{ order.time }}</span>
+                  <button
+                    @click="deleteOrder(order.id)"
+                    class="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-all duration-200"
+                    title="刪除訂單"
+                  >
+                    🗑️
+                  </button>
+                </div>
               </div>
               <div class="text-lg font-mono text-blue-700">
                 {{ order.content }}
@@ -298,16 +307,19 @@ const handleMessage = (message) => {
       // 更新連線狀態資訊
       break
 
-    case 'orders_cleared':
-      console.log('Orders cleared by server')
-      orders.value = []
-      orderCounter.value = 1
-      isClearing.value = false // 清除清空標誌
+    case 'order_deleted':
+      console.log('Order deleted:', message.order_id)
+      // 從本地訂單列表中移除已刪除的訂單
+      orders.value = orders.value.filter(order => order.id !== message.order_id)
       break
 
     case 'error':
       console.error('Server error:', message.message)
       errorMessage.value = message.message
+      // 3秒後自動清除錯誤消息
+      setTimeout(() => {
+        errorMessage.value = ''
+      }, 3000)
       break
 
     default:
@@ -401,6 +413,20 @@ const clearOrders = () => {
     orderCounter.value = 1;
     sendMessage({
       type: 'clear_orders',
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+const deleteOrder = (orderId) => {
+  if (!isConnected.value) {
+    errorMessage.value = '請先連線到後端再刪除訂單，否則無法刪除後端資料。';
+    return;
+  }
+  if (confirm(`確定要刪除訂單 ${orderId} 嗎？`)) {
+    sendMessage({
+      type: 'delete_order',
+      order_id: orderId,
       timestamp: new Date().toISOString()
     });
   }

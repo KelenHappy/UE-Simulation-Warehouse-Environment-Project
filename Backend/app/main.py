@@ -65,7 +65,7 @@ orders_db, order_counter = load_data()
 # 連線管理
 connected_clients = set()
 
-async def handle_client(websocket, path):
+async def handle_client(websocket):
     """處理客戶端連線"""
     global order_counter  # 在函數開頭統一聲明全域變數
     
@@ -132,6 +132,52 @@ async def handle_client(websocket, path):
                         "type": "orders_cleared",
                         "timestamp": datetime.utcnow().isoformat()
                     })
+
+                elif data.get("type") == "delete_order":
+                    # 刪除單個訂單
+                    order_id = data.get("order_id")
+                    if order_id is None:
+                        await websocket.send(json.dumps({
+                            "type": "error",
+                            "message": "Missing order_id parameter",
+                            "timestamp": datetime.utcnow().isoformat()
+                        }))
+                        continue
+
+                    # 查找並刪除訂單
+                    order_to_delete = None
+                    for order in orders_db:
+                        if order["id"] == order_id:
+                            order_to_delete = order
+                            break
+
+                    if order_to_delete:
+                        orders_db.remove(order_to_delete)
+                        save_data()  # 保存數據到文件
+
+                        logger.info(f"Order {order_id} deleted successfully")
+
+                        # 回傳確認訊息給發送者
+                        response = {
+                            "type": "order_deleted",
+                            "order_id": order_id,
+                            "timestamp": datetime.utcnow().isoformat()
+                        }
+                        await websocket.send(json.dumps(response))
+
+                        # 廣播給所有連線的客戶端
+                        await broadcast_to_all({
+                            "type": "order_deleted",
+                            "order_id": order_id,
+                            "timestamp": datetime.utcnow().isoformat()
+                        })
+                    else:
+                        # 訂單不存在
+                        await websocket.send(json.dumps({
+                            "type": "error",
+                            "message": f"Order with ID {order_id} not found",
+                            "timestamp": datetime.utcnow().isoformat()
+                        }))
 
                 elif data.get("type") == "get_orders":
                     # 請求訂單列表
