@@ -10,14 +10,57 @@ import websockets
 import logging
 from datetime import datetime
 import os
+from pathlib import Path
 
 # 配置日誌
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 存儲訂單的簡單記憶體資料庫（使用列表作為全域變數）
-orders_db = []
-order_counter = 1
+# 數據存儲配置
+DATA_DIR = Path("data")
+DATA_FILE = DATA_DIR / "app_data.json"
+
+# 創建數據目錄
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+def load_data():
+    """從JSON文件加載數據"""
+    if not DATA_FILE.exists():
+        logger.info(f"沒有找到現有數據文件，使用空數據啟動")
+        return [], 1
+    
+    try:
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        orders = data.get('orders', [])
+        counter = data.get('order_counter', len(orders) + 1)
+        logger.info(f"成功加載 {len(orders)} 筆訂單")
+        return orders, counter
+    except Exception as e:
+        logger.error(f"加載數據時發生錯誤: {e}")
+        return [], 1
+
+def save_data():
+    """保存數據到JSON文件"""
+    try:
+        data = {
+            "orders": orders_db,
+            "order_counter": order_counter
+        }
+        # 先寫入臨時文件，確保數據完整性
+        temp_file = DATA_FILE.with_suffix('.tmp')
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        # 替換原文件
+        temp_file.replace(DATA_FILE)
+        logger.info(f"成功保存數據到 {DATA_FILE}")
+        return True
+    except Exception as e:
+        logger.error(f"保存數據時發生錯誤: {e}")
+        return False
+
+# 從文件加載現有數據
+orders_db, order_counter = load_data()
 
 # 連線管理
 connected_clients = set()
@@ -53,6 +96,7 @@ async def handle_client(websocket, path):
 
                     orders_db.append(order)
                     order_counter += 1
+                    save_data()  # 保存數據到文件
 
                     logger.info(f"Order saved: {order_content}")
 
@@ -78,6 +122,7 @@ async def handle_client(websocket, path):
                     
                     orders_db.clear()
                     order_counter = 1
+                    save_data()  # 保存數據到文件
                     
                     logger.info(f"AFTER CLEAR - Orders count: {len(orders_db)}, Counter: {order_counter}")
                     logger.info(f"AFTER CLEAR - Orders: {orders_db}")
