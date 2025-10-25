@@ -40,7 +40,7 @@
         <!-- 左側：訂單歷史 -->
         <div class="bg-white rounded-2xl shadow-xl p-6">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-bold text-gray-800">訂單歷史</h2>
+            <h2 class="text-xl font-bold text-gray-800">訂單列表</h2>
             <button
               @click="clearOrders"
               class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-300 text-sm font-medium"
@@ -93,15 +93,16 @@
             <div class="flex flex-wrap gap-2 p-4 bg-gray-50 rounded-xl border-2 border-gray-300 min-h-[120px]">
               <div
                 v-for="(num, index) in numbers"
-                :key="index"
+                :key="`${num}-${index}`"
                 class="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-md border-2 border-blue-300"
               >
                 <input
                   v-model.number="numbers[index]"
                   type="number"
                   class="w-20 text-center font-bold text-lg text-blue-600 focus:outline-none"
-                  min="0"
+                  min="1"
                   max="999"
+                  @input="validateNumber(index)"
                 />
                 <button
                   @click="removeNumber(index)"
@@ -179,7 +180,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 
 // WebSocket 連線狀態
 const isConnected = ref(false)
@@ -203,6 +204,16 @@ const saveOrders = () => {
   // 不再使用 localStorage，完全依賴後端
   console.log('Frontend no longer uses localStorage for orders')
 }
+
+// 監視數字列表變化，自動去重
+watch(numbers, (newNumbers) => {
+  // 創建一個 Set 來去重，然後轉換回數組
+  const uniqueNumbers = [...new Set(newNumbers)]
+  // 如果去重後的數組長度不同，說明有重複，更新數組
+  if (uniqueNumbers.length !== newNumbers.length) {
+    numbers.value = uniqueNumbers
+  }
+}, { deep: true })
 
 // WebSocket 連線管理
 const connectWebSocket = () => {
@@ -337,7 +348,10 @@ const toggleConnection = () => {
 
 // 訂單管理函數
 const addNumber = () => {
-  numbers.value.push(0)
+  // 檢查是否已經有數字 0 存在，避免重複
+  if (!numbers.value.includes(0)) {
+    numbers.value.push(0)
+  }
 }
 
 const removeNumber = (index) => {
@@ -350,16 +364,35 @@ const clearNumbers = () => {
 
 const addMultipleNumbers = (count) => {
   for (let i = 0; i < count; i++) {
-    numbers.value.push(0)
+    // 檢查是否已經有數字 0 存在，避免重複
+    if (!numbers.value.includes(0)) {
+      numbers.value.push(0)
+    }
   }
+}
+
+const validateNumber = (index) => {
+  const num = numbers.value[index]
+  // 確保數字在有效範圍內
+  if (num < 1) {
+    numbers.value[index] = 1
+  } else if (num > 999) {
+    numbers.value[index] = 999
+  }
+  // 觸發去重（通過 watch 監視器）
 }
 
 const generateRandom = () => {
   const count = Math.floor(Math.random() * 5) + 3 // 3-7個數字
-  numbers.value = []
-  for (let i = 0; i < count; i++) {
-    numbers.value.push(Math.floor(Math.random() * 100) + 1) // 1-100
+  const usedNumbers = new Set()
+
+  // 生成不重複的隨機數字
+  while (usedNumbers.size < count) {
+    const randomNum = Math.floor(Math.random() * 100) + 1 // 1-100
+    usedNumbers.add(randomNum)
   }
+
+  numbers.value = Array.from(usedNumbers)
 }
 
 // 訂單預覽

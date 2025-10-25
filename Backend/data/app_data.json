@@ -1,17 +1,4 @@
 {
-  "orders": [
-    {
-      "id": 3,
-      "content": "96-89-45",
-      "timestamp": "2025-10-25T05:11:11.117Z",
-      "client_id": 139853487438688
-    },
-    {
-      "id": 5,
-      "content": "54-39-42-7-10-17-57",
-      "timestamp": "2025-10-25T05:11:23.663Z",
-      "client_id": 139853487438688
-    }
-  ],
-  "order_counter": 6
+  "orders": [],
+  "order_counter": 1
 }
