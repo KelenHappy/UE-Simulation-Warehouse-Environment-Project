@@ -39,10 +39,6 @@ Intermediate/
 DerivedDataCache/
 Saved/
 
-# Plugins output folders
-Plugins/**/Binaries/
-Plugins/**/Intermediate/
-
 # Ignore generated asset registry data
 *_BuiltData.uasset
 
