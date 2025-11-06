@@ -78,5 +78,8 @@
 			"Name": "MovieRenderPipeline",
 			"Enabled": true
 		}
-	]
+	],
+  "AdditionalContentPaths": [
+    "./Blueprints"
+  ]
 }
