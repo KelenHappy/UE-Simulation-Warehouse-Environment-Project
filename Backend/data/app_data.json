@@ -1,4 +1,16 @@
 {
-  "orders": [],
-  "order_counter": 1
+  "orders": [
+    {
+      "id": 1,
+      "content": "10-20-30",
+      "items": [
+        10,
+        20,
+        30
+      ],
+      "timestamp": "2025-11-06T13:37:41.474Z",
+      "client_id": 2844825498992
+    }
+  ],
+  "order_counter": 2
 }

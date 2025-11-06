@@ -218,7 +218,11 @@ watch(numbers, (newNumbers) => {
 // WebSocket 連線管理
 const connectWebSocket = () => {
   try {
-    websocket = new WebSocket('ws://localhost:8000')
+    const proto = (typeof window !== 'undefined' && window.location?.protocol === 'https:') ? 'wss' : 'ws'
+    const host = (typeof window !== 'undefined' && window.location?.hostname) ? window.location.hostname : 'localhost'
+    const fallback = `${proto}://${host}:8000/ws`
+    const wsUrl = import.meta?.env?.VITE_WS_URL || fallback
+    websocket = new WebSocket(wsUrl)
 
     websocket.onopen = () => {
       console.log('Connected to WebSocket server')
@@ -258,7 +262,7 @@ const connectWebSocket = () => {
 
     websocket.onerror = (error) => {
       console.error('WebSocket error:', error)
-      errorMessage.value = '連線錯誤'
+      errorMessage.value = `連線錯誤：${error?.message || '未知錯誤'}`
       isConnected.value = false
     }
 
