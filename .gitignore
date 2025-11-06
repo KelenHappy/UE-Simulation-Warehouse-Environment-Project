@@ -60,8 +60,6 @@ AutoWarehouse/Build/
 AutoWarehouse/Intermediate/
 AutoWarehouse/DerivedDataCache/
 AutoWarehouse/Saved/
-AutoWarehouse/Plugins/**/Binaries/
-AutoWarehouse/Plugins/**/Intermediate/
 AutoWarehouse/Content
 AutoWarehouse/Content.zip
 AutoWarehouse/Content.7z
