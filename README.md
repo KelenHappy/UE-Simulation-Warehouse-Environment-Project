@@ -139,7 +139,9 @@ cd Backend
 cd Backend
 python tests/test_websocket.py
 ```
-
+## 3D Model
+[Comfy UI](https://github.com/comfyanonymous/ComfyUI)
+[hunyuan3D](https://huggingface.co/Comfy-Org/hunyuan3D_2.1_repackaged/tree/main)
 ## 📄 授權
 
 此專案僅供教育和演示用途。
