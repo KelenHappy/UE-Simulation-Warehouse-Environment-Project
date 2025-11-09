@@ -11,7 +11,7 @@
             <p class="text-center text-gray-600 mt-2">Order Management System</p>
           </div>
 
-          <!-- 連線狀態 -->
+          <!-- 連線狀態和功能按鈕 -->
           <div class="flex items-center space-x-4">
             <div class="flex items-center space-x-2">
               <div class="w-3 h-3 rounded-full" :class="isConnected ? 'bg-green-500' : 'bg-red-500'"></div>
@@ -19,6 +19,14 @@
                 {{ isConnected ? '已連線' : '未連線' }}
               </span>
             </div>
+            <button
+              @click="showThreeScene = !showThreeScene"
+              :class="showThreeScene ? 'bg-purple-600 hover:bg-purple-700' : 'bg-indigo-500 hover:bg-indigo-600'"
+              class="px-4 py-2 text-white rounded-lg transition-all duration-300 font-medium flex items-center gap-2"
+            >
+              <span>🎮</span>
+              {{ showThreeScene ? '關閉 3D 場景' : '開啟 3D 場景' }}
+            </button>
             <button
               @click="toggleConnection"
               :class="isConnected ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'"
@@ -175,12 +183,27 @@
           </div>
         </div>
       </div>
+
+      <!-- Three.js 3D 場景區域 -->
+      <div v-if="showThreeScene" class="mt-6 bg-white rounded-2xl shadow-xl p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-bold text-gray-800">3D 場景視圖</h2>
+          <button
+            @click="showThreeScene = false"
+            class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 text-sm font-medium"
+          >
+            關閉
+          </button>
+        </div>
+        <ThreeScene />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import ThreeScene from './components/ThreeScene.vue'
 
 // WebSocket 連線狀態
 const isConnected = ref(false)
@@ -189,6 +212,9 @@ let websocket = null
 
 // 清空狀態標誌
 const isClearing = ref(false)
+
+// 3D 場景顯示狀態
+const showThreeScene = ref(false)
 
 // 數字列表
 const numbers = ref([10, 20, 30])
