@@ -3,9 +3,8 @@
     <div class="max-w-7xl mx-auto">
       <HeaderControls
         :is-connected="isConnected"
-        :show-three-scene="showThreeScene"
         :error-message="errorMessage"
-        @toggle-three="showThreeScene = !showThreeScene"
+        @open-three="openThreeScene"
         @toggle-connection="toggleConnection"
       />
 
@@ -29,33 +28,17 @@
           @submit-order="submitOrder"
         />
       </div>
-
-      <div v-if="showThreeScene" class="mt-6 bg-white rounded-2xl shadow-xl p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-xl font-bold text-gray-800">3D 場景視圖</h2>
-          <button
-            @click="showThreeScene = false"
-            class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 text-sm font-medium"
-          >
-            關閉
-          </button>
-        </div>
-        <ThreeScene />
-      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import ThreeScene from './components/ThreeScene.vue'
+import { onMounted, onUnmounted } from 'vue'
 import HeaderControls from './components/HeaderControls.vue'
 import OrderList from './components/OrderList.vue'
 import OrderForm from './components/OrderForm.vue'
 import { useOrderNumbers } from './composables/useOrderNumbers'
 import { useWebSocket } from './composables/useWebSocket'
-
-const showThreeScene = ref(false)
 
 const {
   numbers,
@@ -81,6 +64,10 @@ const {
   requestDeleteOrder,
   addLocalOrder
 } = useWebSocket()
+
+const openThreeScene = () => {
+  window.open('/three.html', '_blank')
+}
 
 const submitOrder = () => {
   if (numbers.value.length === 0) return

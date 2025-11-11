@@ -16,12 +16,11 @@
           </span>
         </div>
         <button
-          @click="$emit('toggle-three')"
-          :class="showThreeScene ? 'bg-purple-600 hover:bg-purple-700' : 'bg-indigo-500 hover:bg-indigo-600'"
-          class="px-4 py-2 text-white rounded-lg transition-all duration-300 font-medium flex items-center gap-2"
+          @click="$emit('open-three')"
+          class="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-all duration-300 font-medium flex items-center gap-2"
         >
           <span>🎮</span>
-          {{ showThreeScene ? '關閉 3D 場景' : '開啟 3D 場景' }}
+          開啟 3D 場景頁面
         </button>
         <button
           @click="$emit('toggle-connection')"
@@ -43,12 +42,8 @@
 </template>
 
 <script setup>
-const { isConnected, showThreeScene, errorMessage } = defineProps({
+const { isConnected, errorMessage } = defineProps({
   isConnected: {
-    type: Boolean,
-    required: true
-  },
-  showThreeScene: {
     type: Boolean,
     required: true
   },
@@ -58,5 +53,5 @@ const { isConnected, showThreeScene, errorMessage } = defineProps({
   }
 })
 
-defineEmits(['toggle-three', 'toggle-connection'])
+defineEmits(['open-three', 'toggle-connection'])
 </script>
