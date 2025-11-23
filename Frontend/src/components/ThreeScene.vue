@@ -4,6 +4,19 @@
         <div class="controls-hint">
             <span>🎮 WASD/方向鍵 移動 | 🖱️ 拖曳旋轉鏡頭</span>
         </div>
+        <div class="speed-control">
+            <label>
+                速度
+                <input
+                    v-model.number="moveSpeed"
+                    type="range"
+                    min="1"
+                    max="20"
+                    step="0.5"
+                />
+                <span class="speed-value">{{ moveSpeed.toFixed(1) }}</span>
+            </label>
+        </div>
     </div>
 </template>
 
@@ -27,6 +40,7 @@ let scene,
 let yaw = 0;
 let pitch = -0.3;
 const cameraOffset = new THREE.Vector3(0, 2, 6);
+const moveSpeed = ref(6.5);
 const keyState = new Set();
 let isDragging = false;
 let previousPointer = { x: 0, y: 0 };
@@ -436,13 +450,12 @@ onMounted(() => {
     function updatePlayer(delta) {
         if (!player) return;
 
-        const moveSpeed = 6.5;
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
         forward.y = 0;
         forward.normalize();
         const right = new THREE.Vector3()
-            .crossVectors(new THREE.Vector3(0, 1, 0), forward)
+            .crossVectors(forward, new THREE.Vector3(0, 1, 0))
             .normalize();
 
         const direction = new THREE.Vector3();
@@ -461,7 +474,7 @@ onMounted(() => {
 
         if (direction.lengthSq() > 0) {
             direction.normalize();
-            player.position.addScaledVector(direction, moveSpeed * delta);
+            player.position.addScaledVector(direction, moveSpeed.value * delta);
         }
 
         // 讓玩家朝向移動方向
@@ -661,5 +674,31 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 4px;
+}
+
+.speed-control {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 10;
+    backdrop-filter: blur(4px);
+}
+
+.speed-control input[type="range"] {
+    width: 120px;
+}
+
+.speed-value {
+    min-width: 40px;
+    display: inline-block;
+    text-align: right;
 }
 </style>
