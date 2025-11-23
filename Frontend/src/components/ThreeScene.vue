@@ -2,7 +2,20 @@
     <div class="three-scene-wrapper">
         <div ref="container" class="three-container"></div>
         <div class="controls-hint">
-            <span>🖱️ 左鍵拖曳旋轉 | 滾輪縮放</span>
+            <span>🎮 WASD/方向鍵 移動 | 🖱️ 拖曳旋轉鏡頭 | ␣ 上升 / Shift 下降</span>
+        </div>
+        <div class="speed-control">
+            <label>
+                速度
+                <input
+                    v-model.number="moveSpeed"
+                    type="range"
+                    min="1"
+                    max="20"
+                    step="0.5"
+                />
+                <span class="speed-value">{{ moveSpeed.toFixed(1) }}</span>
+            </label>
         </div>
     </div>
 </template>
@@ -11,7 +24,6 @@
 import { ref, onMounted, onUnmounted } from "vue";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { useCargoData } from "../composables/useCargoData.js";
 import {
     convertBoxesToCargoData,
@@ -23,10 +35,29 @@ let scene,
     camera,
     renderer,
     boxes = [],
-    controls,
-    baseModel = null;
+    baseModel = null,
+    trackPieces = [],
+    player = null;
+const unloadBays = [
+    { cells: ["0-0", "1-0"], protrudeSteps: 1 },
+    { cells: ["3-0", "4-0"], protrudeSteps: 1 },
+];
+const unloadAreaCells = new Set(unloadBays.flatMap((bay) => bay.cells));
+let yaw = 0;
+let pitch = -0.3;
+const cameraOffset = new THREE.Vector3(0, 2, 6);
+const moveSpeed = ref(6.5);
+const keyState = new Set();
+let isDragging = false;
+let previousPointer = { x: 0, y: 0 };
+const clock = new THREE.Clock();
 let animationId = null;
 let handleResize = null;
+let handleKeyDown = null;
+let handleKeyUp = null;
+let handlePointerDown = null;
+let handlePointerMove = null;
+let handlePointerUp = null;
 
 // 使用 cargo 數據管理
 const {
@@ -55,7 +86,7 @@ onMounted(() => {
         0.1,
         1000,
     );
-    camera.position.set(0, 0, 5);
+    camera.position.set(0, 2, 8);
 
     // 創建渲染器
     renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -69,15 +100,6 @@ onMounted(() => {
     renderer.domElement.style.touchAction = "none";
 
     container.value.appendChild(renderer.domElement);
-
-    // 創建軌道控制器（支持拖曳和旋轉）
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; // 啟用阻尼效果，使旋轉更平滑
-    controls.dampingFactor = 0.05; // 阻尼係數
-    controls.enableZoom = true; // 啟用縮放
-    controls.enablePan = false; // 禁用平移（不使用右鍵）
-    controls.minDistance = 1; // 最小縮放距離
-    controls.maxDistance = 100; // 最大縮放距離
 
     // 添加環境光
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -196,10 +218,25 @@ onMounted(() => {
             console.log("最終邊界框:", finalMin, "到", finalMax);
 
             // 創建方塊陣列 (5x10x5 = 250個)
-            createBoxGridFromModel(5, 10, 5, modelSize, modelCenter);
+            const gridMetrics = createBoxGridFromModel(
+                5,
+                10,
+                5,
+                modelSize,
+                modelCenter,
+            );
 
             // 調整相機位置
             adjustCamera(5, 10, 5, modelSize);
+
+            // 使用 blue_box.glb 打造高於貨物的環形軌道
+            createTrackLoop(gridMetrics);
+
+            // 建立卸貨區並鋪設軌道
+            createUnloadAreas(gridMetrics);
+
+            // 建立可控制的玩家模型
+            createPlayer(modelSize);
         },
         (progress) => {
             console.log(
@@ -213,13 +250,7 @@ onMounted(() => {
     );
 
     // 從模型創建方塊網格的函數
-    function createBoxGridFromModel(
-        width,
-        depth,
-        height,
-        modelSize,
-        modelCenter,
-    ) {
+    function createBoxGridFromModel(width, depth, height, modelSize, modelCenter) {
         // 使用模型的實際尺寸（確保為正數）
         const boxWidth = Math.max(Math.abs(modelSize.x), 0.01);
         const boxDepth = Math.max(Math.abs(modelSize.z), 0.01);
@@ -243,6 +274,11 @@ onMounted(() => {
         const startZ = -totalDepth / 2 + boxDepth / 2;
         const startY = -totalHeight / 2 + boxHeight / 2;
 
+        const topLayerCenterY = startY + (height - 1) * (boxHeight + spacingY);
+        const topY = topLayerCenterY - modelCenter.y + boxHeight / 2;
+        const pillarTopY = topY + boxHeight;
+        const bottomY = startY - modelCenter.y - boxHeight / 2;
+
         // 創建白色材質（用於支柱）
         const shelfMaterial = new THREE.MeshStandardMaterial({
             color: 0xffffff,
@@ -256,7 +292,13 @@ onMounted(() => {
         // 創建方塊
         for (let x = 0; x < width; x++) {
             for (let z = 0; z < depth; z++) {
+                const isUnloadCell = unloadAreaCells.has(`${x}-${z}`);
+
                 for (let y = 0; y < height; y++) {
+                    if (isUnloadCell) {
+                        continue;
+                    }
+
                     const targetCenterX = startX + x * (boxWidth + spacingX);
                     const targetCenterZ = startZ + z * (boxDepth + spacingZ);
                     const targetCenterY = startY + y * (boxHeight + spacingY);
@@ -286,17 +328,6 @@ onMounted(() => {
             for (let z = 0; z < depth; z++) {
                 const targetCenterX = startX + x * (boxWidth + spacingX);
                 const targetCenterZ = startZ + z * (boxDepth + spacingZ);
-
-                // 計算最高層方塊的頂部
-                const topLayerCenterY =
-                    startY + (height - 1) * (boxHeight + spacingY);
-                const topY = topLayerCenterY - modelCenter.y + boxHeight / 2;
-
-                // 支柱頂部：最高層頂部 + 再往上一格的高度
-                const pillarTopY = topY + boxHeight;
-
-                // 計算最低層方塊的底部（地面）
-                const bottomY = startY - modelCenter.y - boxHeight / 2;
 
                 // 支柱高度
                 const pillarHeight = pillarTopY - bottomY;
@@ -381,6 +412,28 @@ onMounted(() => {
         }).catch((err) => {
             console.error("✗ 儲存貨物數據異常:", err);
         });
+
+        return {
+            width,
+            depth,
+            height,
+            boxWidth,
+            boxDepth,
+            boxHeight,
+            spacingX,
+            spacingZ,
+            spacingY,
+            totalWidth,
+            totalDepth,
+            totalHeight,
+            startX,
+            startY,
+            startZ,
+            topY,
+            pillarTopY,
+            bottomY,
+            modelCenter,
+        };
     }
 
     // 調整相機位置的函數
@@ -397,28 +450,350 @@ onMounted(() => {
         const totalDepth = depth * boxDepth + (depth - 1) * spacingZ;
         const totalHeight = height * boxHeight + (height - 1) * spacingY;
 
-        // 調整相機位置以適應所有方塊
+        // 調整相機初始距離以適應所有方塊
         const maxDim = Math.max(totalWidth, totalDepth, totalHeight);
         const fov = camera.fov * (Math.PI / 180);
         let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
-        cameraZ *= 1.8; // 添加一些邊距
+        cameraZ *= 1.6; // 添加一些邊距
 
-        // 設置相機位置，從側上方觀看
-        camera.position.set(cameraZ * 0.7, cameraZ * 0.7, cameraZ * 0.7);
-
-        // 設置控制器目標為陣列中心（原點）
-        controls.target.set(0, 0, 0);
-        controls.update();
+        cameraOffset.set(0, Math.max(1.8, cameraZ * 0.2), cameraZ * 0.6);
     }
+
+    function createTrackSegment({
+        sizeX,
+        sizeZ,
+        position,
+        gridMetrics,
+        trackThickness,
+        parent,
+    }) {
+        const segment = baseModel.clone(true);
+        segment.traverse((child) => {
+            if (child.isMesh || child.isGroup || child.isObject3D) {
+                resetTransform(child);
+            }
+            if (child.isMesh) {
+                child.material = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    metalness: 0.08,
+                    roughness: 0.3,
+                    emissive: 0x2a2a2a,
+                    emissiveIntensity: 0.2,
+                });
+            }
+        });
+
+        resetTransform(segment);
+        segment.scale.set(
+            sizeX / gridMetrics.boxWidth,
+            trackThickness / gridMetrics.boxHeight,
+            sizeZ / gridMetrics.boxDepth,
+        );
+        segment.position.copy(position);
+        trackPieces.push(segment);
+        (parent || scene).add(segment);
+    }
+
+    function createTrackLoop(gridMetrics) {
+        if (!baseModel) return;
+
+        const trackGroup = new THREE.Group();
+        const laneWidth = Math.max(
+            Math.min(gridMetrics.spacingX, gridMetrics.spacingZ) * 0.8,
+            gridMetrics.boxWidth * 0.1,
+        );
+        const trackThickness = gridMetrics.boxHeight * 0.08;
+        const trackY = gridMetrics.pillarTopY + trackThickness * 0.5;
+
+        const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
+        const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
+
+        const horizontalLength = gridMetrics.totalWidth + laneWidth;
+        const verticalLength = gridMetrics.totalDepth + laneWidth;
+
+        for (let z = 0; z < gridMetrics.depth - 1; z++) {
+            const zPos =
+                gridMetrics.startZ + (z + 0.5) * stepZ - gridMetrics.modelCenter.z;
+            createTrackSegment({
+                sizeX: horizontalLength,
+                sizeZ: laneWidth,
+                position: new THREE.Vector3(0, trackY, zPos),
+                gridMetrics,
+                trackThickness,
+                parent: trackGroup,
+            });
+        }
+
+        for (let x = 0; x < gridMetrics.width - 1; x++) {
+            const xPos =
+                gridMetrics.startX + (x + 0.5) * stepX - gridMetrics.modelCenter.x;
+            createTrackSegment({
+                sizeX: laneWidth,
+                sizeZ: verticalLength,
+                position: new THREE.Vector3(xPos, trackY, 0),
+                gridMetrics,
+                trackThickness,
+                parent: trackGroup,
+            });
+        }
+
+        const leftRingX =
+            gridMetrics.startX - stepX / 2 - gridMetrics.modelCenter.x;
+        const rightRingX =
+            gridMetrics.startX + (gridMetrics.width - 1) * stepX + stepX / 2 -
+            gridMetrics.modelCenter.x;
+        const topRingZ = gridMetrics.startZ - stepZ / 2 - gridMetrics.modelCenter.z;
+        const bottomRingZ =
+            gridMetrics.startZ + (gridMetrics.depth - 1) * stepZ + stepZ / 2 -
+            gridMetrics.modelCenter.z;
+
+        const horizontalRingSpan = rightRingX - leftRingX;
+        const verticalRingSpan = bottomRingZ - topRingZ;
+        const ringCenterX = (leftRingX + rightRingX) / 2;
+        const ringCenterZ = (topRingZ + bottomRingZ) / 2;
+        const horizontalRingLength = Math.max(
+            horizontalRingSpan - laneWidth,
+            laneWidth,
+        );
+        const verticalRingLength = Math.max(verticalRingSpan - laneWidth, laneWidth);
+
+        createTrackSegment({
+            sizeX: horizontalRingLength,
+            sizeZ: laneWidth,
+            position: new THREE.Vector3(ringCenterX, trackY, topRingZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
+
+        createTrackSegment({
+            sizeX: horizontalRingLength,
+            sizeZ: laneWidth,
+            position: new THREE.Vector3(ringCenterX, trackY, bottomRingZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
+
+        createTrackSegment({
+            sizeX: laneWidth,
+            sizeZ: verticalRingLength,
+            position: new THREE.Vector3(leftRingX, trackY, ringCenterZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
+
+        createTrackSegment({
+            sizeX: laneWidth,
+            sizeZ: verticalRingLength,
+            position: new THREE.Vector3(rightRingX, trackY, ringCenterZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
+
+        scene.add(trackGroup);
+    }
+
+    function createUnloadAreas(gridMetrics) {
+        if (!baseModel || unloadBays.length === 0) return;
+
+        const trackThickness = gridMetrics.boxHeight * 0.08;
+        const trackY = gridMetrics.bottomY + trackThickness * 0.5;
+        const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
+        const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
+
+        unloadBays.forEach((bay) => {
+            const unloadCells = bay.cells.map((cellKey) => {
+                const [x, z] = cellKey.split("-").map(Number);
+                return { x, z };
+            });
+
+            const minX = Math.min(...unloadCells.map((cell) => cell.x));
+            const maxX = Math.max(...unloadCells.map((cell) => cell.x));
+            const minZ = Math.min(...unloadCells.map((cell) => cell.z));
+            const maxZ = Math.max(...unloadCells.map((cell) => cell.z));
+
+            const basePadWidth =
+                (maxX - minX + 1) * gridMetrics.boxWidth +
+                (maxX - minX) * gridMetrics.spacingX;
+            const basePadDepth =
+                (maxZ - minZ + 1) * gridMetrics.boxDepth +
+                (maxZ - minZ) * gridMetrics.spacingZ;
+
+            const protrudeDepth = Math.max(0, bay.protrudeSteps || 0) * stepZ;
+            const padWidth = basePadWidth;
+            const padDepth = basePadDepth + protrudeDepth;
+
+            const centerX =
+                gridMetrics.startX + ((minX + maxX) / 2) * stepX -
+                gridMetrics.modelCenter.x;
+            const baseCenterZ =
+                gridMetrics.startZ + ((minZ + maxZ) / 2) * stepZ -
+                gridMetrics.modelCenter.z;
+            const centerZ = baseCenterZ - protrudeDepth / 2;
+
+            createTrackSegment({
+                sizeX: padWidth,
+                sizeZ: padDepth,
+                position: new THREE.Vector3(centerX, trackY, centerZ),
+                gridMetrics,
+                trackThickness,
+            });
+        });
+    }
+
+    function createPlayer(modelSize) {
+        const playerGeometry = new THREE.CapsuleGeometry(
+            modelSize.x * 0.15,
+            modelSize.y * 0.2,
+            8,
+            16,
+        );
+        const playerMaterial = new THREE.MeshStandardMaterial({
+            color: 0x54a6ff,
+            roughness: 0.4,
+            metalness: 0.2,
+            emissive: 0x123456,
+            emissiveIntensity: 0.25,
+        });
+
+        player = new THREE.Mesh(playerGeometry, playerMaterial);
+        player.castShadow = true;
+        player.receiveShadow = true;
+        player.position.set(0, modelSize.y * 0.5, Math.max(modelSize.z * 2, 3));
+        scene.add(player);
+    }
+
+    function updatePlayer(delta) {
+        if (!player) return;
+
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+        const right = new THREE.Vector3()
+            .crossVectors(forward, new THREE.Vector3(0, 1, 0))
+            .normalize();
+
+        const direction = new THREE.Vector3();
+        const vertical = new THREE.Vector3(0, 1, 0);
+        if (keyState.has("KeyW") || keyState.has("ArrowUp")) {
+            direction.add(forward);
+        }
+        if (keyState.has("KeyS") || keyState.has("ArrowDown")) {
+            direction.sub(forward);
+        }
+        if (keyState.has("KeyA") || keyState.has("ArrowLeft")) {
+            direction.sub(right);
+        }
+        if (keyState.has("KeyD") || keyState.has("ArrowRight")) {
+            direction.add(right);
+        }
+        if (keyState.has("Space")) {
+            direction.add(vertical);
+        }
+        if (keyState.has("ShiftLeft") || keyState.has("ShiftRight")) {
+            direction.sub(vertical);
+        }
+
+        if (direction.lengthSq() > 0) {
+            const moveDirection = direction.clone().normalize();
+            player.position.addScaledVector(moveDirection, moveSpeed.value * delta);
+
+            const horizontalDirection = moveDirection.clone();
+            horizontalDirection.y = 0;
+
+            if (horizontalDirection.lengthSq() > 0.0001) {
+                const targetQuaternion = new THREE.Quaternion().setFromRotationMatrix(
+                    new THREE.Matrix4().lookAt(
+                        new THREE.Vector3(0, 0, 0),
+                        horizontalDirection,
+                        new THREE.Vector3(0, 1, 0),
+                    ),
+                );
+                player.quaternion.slerp(targetQuaternion, 0.2);
+            }
+        }
+    }
+
+    function updateCamera() {
+        if (!player) return;
+
+        const rotation = new THREE.Quaternion().setFromEuler(
+            new THREE.Euler(pitch, yaw, 0, "YXZ"),
+        );
+        const rotatedOffset = cameraOffset.clone().applyQuaternion(rotation);
+
+        camera.position.copy(player.position).add(rotatedOffset);
+        camera.lookAt(player.position.clone().add(new THREE.Vector3(0, 1, 0)));
+    }
+
+    function registerInputs() {
+        handleKeyDown = (event) => {
+            const handledKeys = [
+                "KeyW",
+                "KeyA",
+                "KeyS",
+                "KeyD",
+                "ArrowUp",
+                "ArrowDown",
+                "ArrowLeft",
+                "ArrowRight",
+                "Space",
+                "ShiftLeft",
+                "ShiftRight",
+            ];
+
+            if (handledKeys.includes(event.code)) {
+                event.preventDefault();
+                keyState.add(event.code);
+            }
+        };
+
+        handleKeyUp = (event) => {
+            keyState.delete(event.code);
+        };
+
+        handlePointerDown = (event) => {
+            isDragging = true;
+            previousPointer = { x: event.clientX, y: event.clientY };
+        };
+
+        handlePointerMove = (event) => {
+            if (!isDragging) return;
+            const deltaX = event.clientX - previousPointer.x;
+            const deltaY = event.clientY - previousPointer.y;
+            previousPointer = { x: event.clientX, y: event.clientY };
+
+            const sensitivity = 0.005;
+            yaw -= deltaX * sensitivity;
+            pitch -= deltaY * sensitivity;
+            const pitchLimit = Math.PI / 2 - 0.1;
+            pitch = Math.max(-pitchLimit, Math.min(pitchLimit, pitch));
+        };
+
+        handlePointerUp = () => {
+            isDragging = false;
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
+        renderer.domElement.addEventListener("mousedown", handlePointerDown);
+        window.addEventListener("mousemove", handlePointerMove);
+        window.addEventListener("mouseup", handlePointerUp);
+    }
+
+    registerInputs();
 
     // 動畫循環
     const animate = () => {
         animationId = requestAnimationFrame(animate);
 
-        // 更新控制器（必須在每一幀調用，如果啟用了阻尼）
-        if (controls) {
-            controls.update();
-        }
+        const delta = clock.getDelta();
+        updatePlayer(delta);
+        updateCamera();
 
         renderer.render(scene, camera);
     };
@@ -449,15 +824,18 @@ onUnmounted(() => {
         window.removeEventListener("resize", handleResize);
     }
 
-    // 清理控制器
-    if (controls) {
-        controls.dispose();
-    }
-
     // 清理 Three.js 資源
     if (container.value && renderer && renderer.domElement) {
         container.value.removeChild(renderer.domElement);
     }
+
+    // 清理事件監聽器
+    if (handleKeyDown) window.removeEventListener("keydown", handleKeyDown);
+    if (handleKeyUp) window.removeEventListener("keyup", handleKeyUp);
+    if (handlePointerDown)
+        renderer?.domElement?.removeEventListener("mousedown", handlePointerDown);
+    if (handlePointerMove) window.removeEventListener("mousemove", handlePointerMove);
+    if (handlePointerUp) window.removeEventListener("mouseup", handlePointerUp);
 
     // 清理方塊資源（GLTF 模型）
     boxes.forEach((box) => {
@@ -479,6 +857,23 @@ onUnmounted(() => {
         scene.remove(box);
     });
     boxes = [];
+
+    trackPieces.forEach((track) => {
+        track.traverse((child) => {
+            if (child.isMesh) {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach((material) => material.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
+                }
+            }
+        });
+        scene.remove(track);
+    });
+    trackPieces = [];
 
     // 清理基礎模型
     if (baseModel) {
@@ -541,5 +936,31 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 4px;
+}
+
+.speed-control {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 10;
+    backdrop-filter: blur(4px);
+}
+
+.speed-control input[type="range"] {
+    width: 120px;
+}
+
+.speed-value {
+    min-width: 40px;
+    display: inline-block;
+    text-align: right;
 }
 </style>
