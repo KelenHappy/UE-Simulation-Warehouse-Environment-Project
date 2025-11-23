@@ -277,6 +277,7 @@ onMounted(() => {
         const topLayerCenterY = startY + (height - 1) * (boxHeight + spacingY);
         const topY = topLayerCenterY - modelCenter.y + boxHeight / 2;
         const pillarTopY = topY + boxHeight;
+        const bottomY = startY - modelCenter.y - boxHeight / 2;
 
         // 創建白色材質（用於支柱）
         const shelfMaterial = new THREE.MeshStandardMaterial({
@@ -327,10 +328,6 @@ onMounted(() => {
             for (let z = 0; z < depth; z++) {
                 const targetCenterX = startX + x * (boxWidth + spacingX);
                 const targetCenterZ = startZ + z * (boxDepth + spacingZ);
-
-                // 計算最高層方塊的頂部
-                // 計算最低層方塊的底部（地面）
-                const bottomY = startY - modelCenter.y - boxHeight / 2;
 
                 // 支柱高度
                 const pillarHeight = pillarTopY - bottomY;
@@ -434,6 +431,7 @@ onMounted(() => {
             startZ,
             topY,
             pillarTopY,
+            bottomY,
             modelCenter,
         };
     }
@@ -505,7 +503,7 @@ onMounted(() => {
             gridMetrics.boxWidth * 0.1,
         );
         const trackThickness = gridMetrics.boxHeight * 0.08;
-        const trackY = gridMetrics.pillarTopY + trackThickness * 0.5;
+        const trackY = gridMetrics.bottomY + trackThickness * 0.5;
 
         const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
         const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
@@ -602,7 +600,7 @@ onMounted(() => {
         if (!baseModel || unloadBays.length === 0) return;
 
         const trackThickness = gridMetrics.boxHeight * 0.08;
-        const trackY = gridMetrics.pillarTopY + trackThickness * 0.5;
+        const trackY = gridMetrics.bottomY + trackThickness * 0.5;
         const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
         const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
 
