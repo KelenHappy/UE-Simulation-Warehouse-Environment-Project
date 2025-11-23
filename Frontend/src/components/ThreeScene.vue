@@ -38,7 +38,11 @@ let scene,
     baseModel = null,
     trackPieces = [],
     player = null;
-const unloadAreaCells = new Set(["0-0", "1-0"]);
+const unloadBays = [
+    { cells: ["0-0", "1-0"], protrudeSteps: 1 },
+    { cells: ["3-0", "4-0"], protrudeSteps: 1 },
+];
+const unloadAreaCells = new Set(unloadBays.flatMap((bay) => bay.cells));
 let yaw = 0;
 let pitch = -0.3;
 const cameraOffset = new THREE.Vector3(0, 2, 6);
@@ -229,7 +233,7 @@ onMounted(() => {
             createTrackLoop(gridMetrics);
 
             // 建立卸貨區並鋪設軌道
-            createUnloadArea(gridMetrics);
+            createUnloadAreas(gridMetrics);
 
             // 建立可控制的玩家模型
             createPlayer(modelSize);
@@ -594,44 +598,51 @@ onMounted(() => {
         scene.add(trackGroup);
     }
 
-    function createUnloadArea(gridMetrics) {
-        if (!baseModel || unloadAreaCells.size === 0) return;
+    function createUnloadAreas(gridMetrics) {
+        if (!baseModel || unloadBays.length === 0) return;
 
         const trackThickness = gridMetrics.boxHeight * 0.08;
         const trackY = gridMetrics.pillarTopY + trackThickness * 0.5;
         const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
         const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
 
-        const unloadCells = Array.from(unloadAreaCells).map((cellKey) => {
-            const [x, z] = cellKey.split("-").map(Number);
-            return { x, z };
-        });
+        unloadBays.forEach((bay) => {
+            const unloadCells = bay.cells.map((cellKey) => {
+                const [x, z] = cellKey.split("-").map(Number);
+                return { x, z };
+            });
 
-        const minX = Math.min(...unloadCells.map((cell) => cell.x));
-        const maxX = Math.max(...unloadCells.map((cell) => cell.x));
-        const minZ = Math.min(...unloadCells.map((cell) => cell.z));
-        const maxZ = Math.max(...unloadCells.map((cell) => cell.z));
+            const minX = Math.min(...unloadCells.map((cell) => cell.x));
+            const maxX = Math.max(...unloadCells.map((cell) => cell.x));
+            const minZ = Math.min(...unloadCells.map((cell) => cell.z));
+            const maxZ = Math.max(...unloadCells.map((cell) => cell.z));
 
-        const padWidth =
-            (maxX - minX + 1) * gridMetrics.boxWidth +
-            (maxX - minX) * gridMetrics.spacingX;
-        const padDepth =
-            (maxZ - minZ + 1) * gridMetrics.boxDepth +
-            (maxZ - minZ) * gridMetrics.spacingZ;
+            const basePadWidth =
+                (maxX - minX + 1) * gridMetrics.boxWidth +
+                (maxX - minX) * gridMetrics.spacingX;
+            const basePadDepth =
+                (maxZ - minZ + 1) * gridMetrics.boxDepth +
+                (maxZ - minZ) * gridMetrics.spacingZ;
 
-        const centerX =
-            gridMetrics.startX + ((minX + maxX) / 2) * stepX -
-            gridMetrics.modelCenter.x;
-        const centerZ =
-            gridMetrics.startZ + ((minZ + maxZ) / 2) * stepZ -
-            gridMetrics.modelCenter.z;
+            const protrudeDepth = Math.max(0, bay.protrudeSteps || 0) * stepZ;
+            const padWidth = basePadWidth;
+            const padDepth = basePadDepth + protrudeDepth;
 
-        createTrackSegment({
-            sizeX: padWidth,
-            sizeZ: padDepth,
-            position: new THREE.Vector3(centerX, trackY, centerZ),
-            gridMetrics,
-            trackThickness,
+            const centerX =
+                gridMetrics.startX + ((minX + maxX) / 2) * stepX -
+                gridMetrics.modelCenter.x;
+            const baseCenterZ =
+                gridMetrics.startZ + ((minZ + maxZ) / 2) * stepZ -
+                gridMetrics.modelCenter.z;
+            const centerZ = baseCenterZ - protrudeDepth / 2;
+
+            createTrackSegment({
+                sizeX: padWidth,
+                sizeZ: padDepth,
+                position: new THREE.Vector3(centerX, trackY, centerZ),
+                gridMetrics,
+                trackThickness,
+            });
         });
     }
 
