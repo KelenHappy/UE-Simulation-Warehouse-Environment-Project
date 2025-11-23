@@ -38,6 +38,7 @@ let scene,
     baseModel = null,
     trackPieces = [],
     player = null;
+const unloadAreaCells = new Set(["0-0", "1-0"]);
 let yaw = 0;
 let pitch = -0.3;
 const cameraOffset = new THREE.Vector3(0, 2, 6);
@@ -227,6 +228,9 @@ onMounted(() => {
             // 使用 blue_box.glb 打造高於貨物的環形軌道
             createTrackLoop(gridMetrics);
 
+            // 建立卸貨區並鋪設軌道
+            createUnloadArea(gridMetrics);
+
             // 建立可控制的玩家模型
             createPlayer(modelSize);
         },
@@ -283,7 +287,13 @@ onMounted(() => {
         // 創建方塊
         for (let x = 0; x < width; x++) {
             for (let z = 0; z < depth; z++) {
+                const isUnloadCell = unloadAreaCells.has(`${x}-${z}`);
+
                 for (let y = 0; y < height; y++) {
+                    if (isUnloadCell) {
+                        continue;
+                    }
+
                     const targetCenterX = startX + x * (boxWidth + spacingX);
                     const targetCenterZ = startZ + z * (boxDepth + spacingZ);
                     const targetCenterY = startY + y * (boxHeight + spacingY);
@@ -447,6 +457,41 @@ onMounted(() => {
         cameraOffset.set(0, Math.max(1.8, cameraZ * 0.2), cameraZ * 0.6);
     }
 
+    function createTrackSegment({
+        sizeX,
+        sizeZ,
+        position,
+        gridMetrics,
+        trackThickness,
+        parent,
+    }) {
+        const segment = baseModel.clone(true);
+        segment.traverse((child) => {
+            if (child.isMesh || child.isGroup || child.isObject3D) {
+                resetTransform(child);
+            }
+            if (child.isMesh) {
+                child.material = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    metalness: 0.08,
+                    roughness: 0.3,
+                    emissive: 0x2a2a2a,
+                    emissiveIntensity: 0.2,
+                });
+            }
+        });
+
+        resetTransform(segment);
+        segment.scale.set(
+            sizeX / gridMetrics.boxWidth,
+            trackThickness / gridMetrics.boxHeight,
+            sizeZ / gridMetrics.boxDepth,
+        );
+        segment.position.copy(position);
+        trackPieces.push(segment);
+        (parent || scene).add(segment);
+    }
+
     function createTrackLoop(gridMetrics) {
         if (!baseModel) return;
 
@@ -464,60 +509,30 @@ onMounted(() => {
         const horizontalLength = gridMetrics.totalWidth + laneWidth;
         const verticalLength = gridMetrics.totalDepth + laneWidth;
 
-        const createSegment = (length, isHorizontal, position) => {
-            const segment = baseModel.clone(true);
-            segment.traverse((child) => {
-                if (child.isMesh || child.isGroup || child.isObject3D) {
-                    resetTransform(child);
-                }
-                if (child.isMesh) {
-                    child.material = new THREE.MeshStandardMaterial({
-                        color: 0xffffff,
-                        metalness: 0.08,
-                        roughness: 0.3,
-                        emissive: 0x2a2a2a,
-                        emissiveIntensity: 0.2,
-                    });
-                }
-            });
-
-            resetTransform(segment);
-            const scaleX = isHorizontal
-                ? length / gridMetrics.boxWidth
-                : laneWidth / gridMetrics.boxWidth;
-            const scaleZ = isHorizontal
-                ? laneWidth / gridMetrics.boxDepth
-                : length / gridMetrics.boxDepth;
-
-            segment.scale.set(
-                scaleX,
-                trackThickness / gridMetrics.boxHeight,
-                scaleZ,
-            );
-            segment.position.copy(position);
-            segment.position.y = trackY;
-            trackPieces.push(segment);
-            trackGroup.add(segment);
-        };
-
         for (let z = 0; z < gridMetrics.depth - 1; z++) {
             const zPos =
                 gridMetrics.startZ + (z + 0.5) * stepZ - gridMetrics.modelCenter.z;
-            createSegment(
-                horizontalLength,
-                true,
-                new THREE.Vector3(0, trackY, zPos),
-            );
+            createTrackSegment({
+                sizeX: horizontalLength,
+                sizeZ: laneWidth,
+                position: new THREE.Vector3(0, trackY, zPos),
+                gridMetrics,
+                trackThickness,
+                parent: trackGroup,
+            });
         }
 
         for (let x = 0; x < gridMetrics.width - 1; x++) {
             const xPos =
                 gridMetrics.startX + (x + 0.5) * stepX - gridMetrics.modelCenter.x;
-            createSegment(
-                verticalLength,
-                false,
-                new THREE.Vector3(xPos, trackY, 0),
-            );
+            createTrackSegment({
+                sizeX: laneWidth,
+                sizeZ: verticalLength,
+                position: new THREE.Vector3(xPos, trackY, 0),
+                gridMetrics,
+                trackThickness,
+                parent: trackGroup,
+            });
         }
 
         const leftRingX =
@@ -540,31 +555,84 @@ onMounted(() => {
         );
         const verticalRingLength = Math.max(verticalRingSpan - laneWidth, laneWidth);
 
-        createSegment(
-            horizontalRingLength,
-            true,
-            new THREE.Vector3(ringCenterX, trackY, topRingZ),
-        );
+        createTrackSegment({
+            sizeX: horizontalRingLength,
+            sizeZ: laneWidth,
+            position: new THREE.Vector3(ringCenterX, trackY, topRingZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
 
-        createSegment(
-            horizontalRingLength,
-            true,
-            new THREE.Vector3(ringCenterX, trackY, bottomRingZ),
-        );
+        createTrackSegment({
+            sizeX: horizontalRingLength,
+            sizeZ: laneWidth,
+            position: new THREE.Vector3(ringCenterX, trackY, bottomRingZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
 
-        createSegment(
-            verticalRingLength,
-            false,
-            new THREE.Vector3(leftRingX, trackY, ringCenterZ),
-        );
+        createTrackSegment({
+            sizeX: laneWidth,
+            sizeZ: verticalRingLength,
+            position: new THREE.Vector3(leftRingX, trackY, ringCenterZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
 
-        createSegment(
-            verticalRingLength,
-            false,
-            new THREE.Vector3(rightRingX, trackY, ringCenterZ),
-        );
+        createTrackSegment({
+            sizeX: laneWidth,
+            sizeZ: verticalRingLength,
+            position: new THREE.Vector3(rightRingX, trackY, ringCenterZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
 
         scene.add(trackGroup);
+    }
+
+    function createUnloadArea(gridMetrics) {
+        if (!baseModel || unloadAreaCells.size === 0) return;
+
+        const trackThickness = gridMetrics.boxHeight * 0.08;
+        const trackY = gridMetrics.pillarTopY + trackThickness * 0.5;
+        const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
+        const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
+
+        const unloadCells = Array.from(unloadAreaCells).map((cellKey) => {
+            const [x, z] = cellKey.split("-").map(Number);
+            return { x, z };
+        });
+
+        const minX = Math.min(...unloadCells.map((cell) => cell.x));
+        const maxX = Math.max(...unloadCells.map((cell) => cell.x));
+        const minZ = Math.min(...unloadCells.map((cell) => cell.z));
+        const maxZ = Math.max(...unloadCells.map((cell) => cell.z));
+
+        const padWidth =
+            (maxX - minX + 1) * gridMetrics.boxWidth +
+            (maxX - minX) * gridMetrics.spacingX;
+        const padDepth =
+            (maxZ - minZ + 1) * gridMetrics.boxDepth +
+            (maxZ - minZ) * gridMetrics.spacingZ;
+
+        const centerX =
+            gridMetrics.startX + ((minX + maxX) / 2) * stepX -
+            gridMetrics.modelCenter.x;
+        const centerZ =
+            gridMetrics.startZ + ((minZ + maxZ) / 2) * stepZ -
+            gridMetrics.modelCenter.z;
+
+        createTrackSegment({
+            sizeX: padWidth,
+            sizeZ: padDepth,
+            position: new THREE.Vector3(centerX, trackY, centerZ),
+            gridMetrics,
+            trackThickness,
+        });
     }
 
     function createPlayer(modelSize) {
