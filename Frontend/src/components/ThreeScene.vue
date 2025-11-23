@@ -464,11 +464,6 @@ onMounted(() => {
         const horizontalLength = gridMetrics.totalWidth + laneWidth;
         const verticalLength = gridMetrics.totalDepth + laneWidth;
 
-        const horizontalRingLength =
-            gridMetrics.totalWidth + laneWidth + gridMetrics.boxWidth + gridMetrics.spacingX;
-        const verticalRingLength =
-            gridMetrics.totalDepth + laneWidth + gridMetrics.boxDepth + gridMetrics.spacingZ;
-
         const createSegment = (length, isHorizontal, position) => {
             const segment = baseModel.clone(true);
             segment.traverse((child) => {
@@ -535,28 +530,38 @@ onMounted(() => {
             gridMetrics.startZ + (gridMetrics.depth - 1) * stepZ + stepZ / 2 -
             gridMetrics.modelCenter.z;
 
+        const horizontalRingSpan = rightRingX - leftRingX;
+        const verticalRingSpan = bottomRingZ - topRingZ;
+        const ringCenterX = (leftRingX + rightRingX) / 2;
+        const ringCenterZ = (topRingZ + bottomRingZ) / 2;
+        const horizontalRingLength = Math.max(
+            horizontalRingSpan - laneWidth,
+            laneWidth,
+        );
+        const verticalRingLength = Math.max(verticalRingSpan - laneWidth, laneWidth);
+
         createSegment(
             horizontalRingLength,
             true,
-            new THREE.Vector3(0, trackY, topRingZ),
+            new THREE.Vector3(ringCenterX, trackY, topRingZ),
         );
 
         createSegment(
             horizontalRingLength,
             true,
-            new THREE.Vector3(0, trackY, bottomRingZ),
+            new THREE.Vector3(ringCenterX, trackY, bottomRingZ),
         );
 
         createSegment(
             verticalRingLength,
             false,
-            new THREE.Vector3(leftRingX, trackY, 0),
+            new THREE.Vector3(leftRingX, trackY, ringCenterZ),
         );
 
         createSegment(
             verticalRingLength,
             false,
-            new THREE.Vector3(rightRingX, trackY, 0),
+            new THREE.Vector3(rightRingX, trackY, ringCenterZ),
         );
 
         scene.add(trackGroup);
