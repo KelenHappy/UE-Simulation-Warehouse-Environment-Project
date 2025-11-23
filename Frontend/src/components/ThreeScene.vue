@@ -2,7 +2,20 @@
     <div class="three-scene-wrapper">
         <div ref="container" class="three-container"></div>
         <div class="controls-hint">
-            <span>🎮 WASD/方向鍵 移動 | 🖱️ 拖曳旋轉鏡頭</span>
+            <span>🎮 WASD/方向鍵 移動 | 🖱️ 拖曳旋轉鏡頭 | ␣ 上升 / Shift 下降</span>
+        </div>
+        <div class="speed-control">
+            <label>
+                速度
+                <input
+                    v-model.number="moveSpeed"
+                    type="range"
+                    min="1"
+                    max="20"
+                    step="0.5"
+                />
+                <span class="speed-value">{{ moveSpeed.toFixed(1) }}</span>
+            </label>
         </div>
     </div>
 </template>
@@ -27,6 +40,7 @@ let scene,
 let yaw = 0;
 let pitch = -0.3;
 const cameraOffset = new THREE.Vector3(0, 2, 6);
+const moveSpeed = ref(6.5);
 const keyState = new Set();
 let isDragging = false;
 let previousPointer = { x: 0, y: 0 };
@@ -436,19 +450,16 @@ onMounted(() => {
     function updatePlayer(delta) {
         if (!player) return;
 
-        const moveSpeed = 3.5;
-        const forward = new THREE.Vector3(
-            Math.sin(yaw),
-            0,
-            Math.cos(yaw),
-        ).normalize();
-        const right = new THREE.Vector3(
-            Math.cos(yaw),
-            0,
-            -Math.sin(yaw),
-        ).normalize();
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+        const right = new THREE.Vector3()
+            .crossVectors(forward, new THREE.Vector3(0, 1, 0))
+            .normalize();
 
         const direction = new THREE.Vector3();
+        const vertical = new THREE.Vector3(0, 1, 0);
         if (keyState.has("KeyW") || keyState.has("ArrowUp")) {
             direction.add(forward);
         }
@@ -461,22 +472,30 @@ onMounted(() => {
         if (keyState.has("KeyD") || keyState.has("ArrowRight")) {
             direction.add(right);
         }
-
-        if (direction.lengthSq() > 0) {
-            direction.normalize();
-            player.position.addScaledVector(direction, moveSpeed * delta);
+        if (keyState.has("Space")) {
+            direction.add(vertical);
+        }
+        if (keyState.has("ShiftLeft") || keyState.has("ShiftRight")) {
+            direction.sub(vertical);
         }
 
-        // 讓玩家朝向移動方向
-        if (direction.lengthSq() > 0.0001) {
-            const targetQuaternion = new THREE.Quaternion().setFromRotationMatrix(
-                new THREE.Matrix4().lookAt(
-                    new THREE.Vector3(0, 0, 0),
-                    direction,
-                    new THREE.Vector3(0, 1, 0),
-                ),
-            );
-            player.quaternion.slerp(targetQuaternion, 0.2);
+        if (direction.lengthSq() > 0) {
+            const moveDirection = direction.clone().normalize();
+            player.position.addScaledVector(moveDirection, moveSpeed.value * delta);
+
+            const horizontalDirection = moveDirection.clone();
+            horizontalDirection.y = 0;
+
+            if (horizontalDirection.lengthSq() > 0.0001) {
+                const targetQuaternion = new THREE.Quaternion().setFromRotationMatrix(
+                    new THREE.Matrix4().lookAt(
+                        new THREE.Vector3(0, 0, 0),
+                        horizontalDirection,
+                        new THREE.Vector3(0, 1, 0),
+                    ),
+                );
+                player.quaternion.slerp(targetQuaternion, 0.2);
+            }
         }
     }
 
@@ -494,7 +513,24 @@ onMounted(() => {
 
     function registerInputs() {
         handleKeyDown = (event) => {
-            keyState.add(event.code);
+            const handledKeys = [
+                "KeyW",
+                "KeyA",
+                "KeyS",
+                "KeyD",
+                "ArrowUp",
+                "ArrowDown",
+                "ArrowLeft",
+                "ArrowRight",
+                "Space",
+                "ShiftLeft",
+                "ShiftRight",
+            ];
+
+            if (handledKeys.includes(event.code)) {
+                event.preventDefault();
+                keyState.add(event.code);
+            }
         };
 
         handleKeyUp = (event) => {
@@ -664,5 +700,31 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 4px;
+}
+
+.speed-control {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 10;
+    backdrop-filter: blur(4px);
+}
+
+.speed-control input[type="range"] {
+    width: 120px;
+}
+
+.speed-value {
+    min-width: 40px;
+    display: inline-block;
+    text-align: right;
 }
 </style>
