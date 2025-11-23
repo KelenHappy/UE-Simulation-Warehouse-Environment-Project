@@ -450,15 +450,22 @@ onMounted(() => {
         if (!baseModel) return;
 
         const trackGroup = new THREE.Group();
-        const laneWidth = gridMetrics.boxWidth * 0.9;
-        const trackThickness = gridMetrics.boxHeight * 0.25;
-        const clearance = gridMetrics.boxHeight * 0.8 + gridMetrics.spacingY;
-        const trackY = gridMetrics.topY + clearance + trackThickness / 2;
+        const laneWidth = Math.max(
+            Math.min(gridMetrics.spacingX, gridMetrics.spacingZ) * 0.8,
+            gridMetrics.boxWidth * 0.1,
+        );
+        const trackThickness = gridMetrics.boxHeight * 0.08;
 
-        const horizontalLength = gridMetrics.totalWidth + gridMetrics.spacingX * 2;
-        const verticalLength = gridMetrics.totalDepth + gridMetrics.spacingZ * 2;
-        const offsetZ = gridMetrics.totalDepth / 2 + gridMetrics.spacingZ + laneWidth / 2;
-        const offsetX = gridMetrics.totalWidth / 2 + gridMetrics.spacingX + laneWidth / 2;
+        const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
+        const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
+        const offsetX = stepX / 2;
+        const offsetZ = stepZ / 2;
+
+        const horizontalLength = gridMetrics.totalWidth + laneWidth;
+        const verticalLength = gridMetrics.totalDepth + laneWidth;
+
+        const groundY =
+            gridMetrics.startY - gridMetrics.boxHeight / 2 + trackThickness / 2;
 
         const createSegment = (length, isHorizontal, position) => {
             const segment = baseModel.clone(true);
@@ -466,8 +473,14 @@ onMounted(() => {
                 if (child.isMesh || child.isGroup || child.isObject3D) {
                     resetTransform(child);
                 }
-                if (child.isMesh && child.material) {
-                    child.material = child.material.clone();
+                if (child.isMesh) {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        metalness: 0.08,
+                        roughness: 0.3,
+                        emissive: 0x2a2a2a,
+                        emissiveIntensity: 0.2,
+                    });
                 }
             });
 
@@ -481,7 +494,7 @@ onMounted(() => {
 
             segment.scale.set(scaleX, trackThickness / gridMetrics.boxHeight, scaleZ);
             segment.position.copy(position);
-            segment.position.y = trackY;
+            segment.position.y = groundY;
             trackPieces.push(segment);
             trackGroup.add(segment);
         };
@@ -489,22 +502,22 @@ onMounted(() => {
         createSegment(
             horizontalLength,
             true,
-            new THREE.Vector3(0, trackY, offsetZ),
+            new THREE.Vector3(0, groundY, offsetZ),
         );
         createSegment(
             horizontalLength,
             true,
-            new THREE.Vector3(0, trackY, -offsetZ),
+            new THREE.Vector3(0, groundY, -offsetZ),
         );
         createSegment(
             verticalLength,
             false,
-            new THREE.Vector3(offsetX, trackY, 0),
+            new THREE.Vector3(offsetX, groundY, 0),
         );
         createSegment(
             verticalLength,
             false,
-            new THREE.Vector3(-offsetX, trackY, 0),
+            new THREE.Vector3(-offsetX, groundY, 0),
         );
 
         scene.add(trackGroup);
