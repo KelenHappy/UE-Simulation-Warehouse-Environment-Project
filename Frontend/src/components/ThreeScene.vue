@@ -420,6 +420,7 @@ onMounted(() => {
             startZ,
             topY,
             pillarTopY,
+            modelCenter,
         };
     }
 
@@ -455,17 +456,13 @@ onMounted(() => {
             gridMetrics.boxWidth * 0.1,
         );
         const trackThickness = gridMetrics.boxHeight * 0.08;
+        const trackY = gridMetrics.topY + trackThickness * 0.5 + gridMetrics.boxHeight * 0.02;
 
         const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
         const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
-        const offsetX = stepX / 2;
-        const offsetZ = stepZ / 2;
 
         const horizontalLength = gridMetrics.totalWidth + laneWidth;
         const verticalLength = gridMetrics.totalDepth + laneWidth;
-
-        const groundY =
-            gridMetrics.startY - gridMetrics.boxHeight / 2 + trackThickness / 2;
 
         const createSegment = (length, isHorizontal, position) => {
             const segment = baseModel.clone(true);
@@ -492,33 +489,36 @@ onMounted(() => {
                 ? laneWidth / gridMetrics.boxDepth
                 : length / gridMetrics.boxDepth;
 
-            segment.scale.set(scaleX, trackThickness / gridMetrics.boxHeight, scaleZ);
+            segment.scale.set(
+                scaleX,
+                trackThickness / gridMetrics.boxHeight,
+                scaleZ,
+            );
             segment.position.copy(position);
-            segment.position.y = groundY;
+            segment.position.y = trackY;
             trackPieces.push(segment);
             trackGroup.add(segment);
         };
 
-        createSegment(
-            horizontalLength,
-            true,
-            new THREE.Vector3(0, groundY, offsetZ),
-        );
-        createSegment(
-            horizontalLength,
-            true,
-            new THREE.Vector3(0, groundY, -offsetZ),
-        );
-        createSegment(
-            verticalLength,
-            false,
-            new THREE.Vector3(offsetX, groundY, 0),
-        );
-        createSegment(
-            verticalLength,
-            false,
-            new THREE.Vector3(-offsetX, groundY, 0),
-        );
+        for (let z = 0; z < gridMetrics.depth - 1; z++) {
+            const zPos =
+                gridMetrics.startZ + (z + 0.5) * stepZ - gridMetrics.modelCenter.z;
+            createSegment(
+                horizontalLength,
+                true,
+                new THREE.Vector3(0, trackY, zPos),
+            );
+        }
+
+        for (let x = 0; x < gridMetrics.width - 1; x++) {
+            const xPos =
+                gridMetrics.startX + (x + 0.5) * stepX - gridMetrics.modelCenter.x;
+            createSegment(
+                verticalLength,
+                false,
+                new THREE.Vector3(xPos, trackY, 0),
+            );
+        }
 
         scene.add(trackGroup);
     }
