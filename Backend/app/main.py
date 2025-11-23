@@ -76,7 +76,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 掛載 UE4 專用路由（支援以 `python app/main.py` 直接啟動）
+# 掛載 VUE 專用路由（支援以 `python app/main.py` 直接啟動）
 try:
     from app.services.send_to_Front import router as ue_router
 except ModuleNotFoundError:

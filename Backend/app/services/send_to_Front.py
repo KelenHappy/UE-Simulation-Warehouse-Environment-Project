@@ -1,12 +1,16 @@
-from typing import List, Dict, Any, Optional
-
-from fastapi import APIRouter, Request, HTTPException
-from pydantic import BaseModel
+import json
+import os
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-router = APIRouter(prefix="/ue", tags=["ue4"])
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
-class UEAckRequest(BaseModel):
+router = APIRouter(prefix="/vue", tags=["vue"])
+
+
+class VUEAckRequest(BaseModel):
     order_id: int
     status: str  # e.g. "received" | "in_progress" | "completed" | "failed"
     message: Optional[str] = None
@@ -16,8 +20,53 @@ _ack_history: List[Dict[str, Any]] = []
 _telemetry_history: List[Dict[str, Any]] = []
 
 
+# 貨物數據模型
+class Cargo(BaseModel):
+    id: str
+    position: Dict[str, float]
+    size: Dict[str, float]
+    timestamp: str
+
+
+# 貨物路徑
+CARGO_DATA_FILE = Path(__file__).parent.parent.parent / "data" / "cargo_data.json"
+
+# 貨物數據庫
+_cargo_db: List[Dict[str, Any]] = []
+
+
+# 加載貨物數據
+def load_cargo_data():
+    global _cargo_db
+    try:
+        if CARGO_DATA_FILE.exists():
+            with open(CARGO_DATA_FILE, "r", encoding="utf-8") as f:
+                _cargo_db = json.load(f)
+        else:
+            _cargo_db = []
+    except Exception as e:
+        print(f"加载货物数据失败: {e}")
+        _cargo_db = []
+
+
+# 保存貨物數據
+def save_cargo_data():
+    try:
+        # 確認目錄是否存在
+        CARGO_DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CARGO_DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(_cargo_db, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"保存货物数据失败: {e}")
+        raise
+
+
+# 自啟動
+load_cargo_data()
+
+
 @router.get("/ping")
-async def ue_ping(request: Request):
+async def Vue_ping(request: Request):
     orders_db = getattr(request.app.state, "orders_db", [])
     return {
         "status": "ok",
@@ -27,7 +76,7 @@ async def ue_ping(request: Request):
 
 
 @router.get("/orders")
-async def ue_list_orders(request: Request, limit: int = 20):
+async def Vue_list_orders(request: Request, limit: int = 20):
     orders_db = getattr(request.app.state, "orders_db", [])
     recent = orders_db[-limit:]
     # 回傳精簡結構，方便 VaRest 解析
@@ -44,7 +93,7 @@ async def ue_list_orders(request: Request, limit: int = 20):
 
 
 @router.get("/order/latest")
-async def ue_latest_order(request: Request):
+async def Vue_latest_order(request: Request):
     orders_db = getattr(request.app.state, "orders_db", [])
     if not orders_db:
         raise HTTPException(status_code=404, detail="No orders")
@@ -58,7 +107,7 @@ async def ue_latest_order(request: Request):
 
 
 @router.post("/ack")
-async def ue_acknowledge(payload: UEAckRequest):
+async def Vue_acknowledge(payload: VUEAckRequest):
     record = {
         "order_id": payload.order_id,
         "status": payload.status,
@@ -71,13 +120,13 @@ async def ue_acknowledge(payload: UEAckRequest):
     return {"ok": True}
 
 
-class UETelemetry(BaseModel):
+class VUETelemetry(BaseModel):
     player_id: Optional[str] = None
     data: Dict[str, Any]
 
 
 @router.post("/telemetry")
-async def ue_telemetry(payload: UETelemetry):
+async def Vue_telemetry(payload: VUETelemetry):
     record = {
         "player_id": payload.player_id,
         "data": payload.data,
@@ -90,32 +139,88 @@ async def ue_telemetry(payload: UETelemetry):
 
 
 @router.get("/acks")
-async def ue_list_acks(limit: int = 100):
+async def Vue_list_acks(limit: int = 100):
     return {"acks": _ack_history[-limit:]}
 
 
 @router.get("/telemetry")
-async def ue_list_telemetry(limit: int = 100):
+async def Vue_list_telemetry(limit: int = 100):
     return {"telemetry": _telemetry_history[-limit:]}
 
+
+# 貨物網路功能
+@router.post("/cargo")
+async def receive_cargo_data(cargo_data: List[Cargo]):
+    """接收並儲存"""
+    try:
+        # 将货物数据转换为字典格式并添加到内存数据库
+        for cargo in cargo_data:
+            cargo_dict = cargo.dict()
+            _cargo_db.append(cargo_dict)
+
+        # 保存到 JSON 文件
+        save_cargo_data()
+
+        return {
+            "message": "貨物已儲存",
+            "total_cargo": len(_cargo_db),
+            "saved_count": len(cargo_data),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"貨物儲存時出錯: {str(e)}")
+
+
+@router.get("/cargo")
+async def get_cargo_data(limit: int = 100):
+    """獲取貨物資訊"""
+    return {"cargo": _cargo_db[-limit:], "total": len(_cargo_db)}
+
+
+@router.get("/cargo/latest")
+async def get_latest_cargo():
+    """獲取貨物最新資訊"""
+    if not _cargo_db:
+        raise HTTPException(status_code=404, detail="No cargo data")
+    return _cargo_db[-1]
+
+
+@router.delete("/cargo")
+async def clear_cargo_data():
+    """清空貨物數據"""
+    global _cargo_db
+    _cargo_db = []
+    save_cargo_data()
+    return {"message": "貨物數據已清空", "total_cargo": 0}
+
+
 """
-GET /ue/ping - 測試連線
+GET /vue/ping - 測試連線
 { "status": "ok", "server_time": "2025-11-06T13:30:00Z", "total_orders": 3 }
-GET /ue/orders?limit=20 - 取得最近20筆訂單
+GET /vue/orders?limit=20 - 取得最近20筆訂單
     {
       "id": 3,
       "content": "12-34-56",
       "items": [12,34,56],
       "timestamp": "..."
     }
-GET /ue/order/latest - 取得最新訂單
+GET /vue/orders/latest - 取得最新訂單
     { "id": 3, "content": "12-34-56", "items": [12,34,56], "timestamp": "..." }
-POST /ue/ack - 確認訂單
+POST /vue/ack - 確認訂單
     { "ok": true }
-POST /ue/telemetry - 發送玩家位置和動作資料
+POST /vue/telemetry - 發送玩家位置和動作資料
     { "ok": true }
-GET /ue/acks - 取得確認記錄
+GET /vue/acks - 取得確認記錄
     { "acks": [{"order_id": 3, "status": "received", "message": "...", "timestamp": "..."}, ...] }
-GET /ue/telemetry - 取得玩家位置和動作資料
+GET /vue/telemetry - 取得玩家位置和動作資料
     { "telemetry": [{"player_id": "player1", "data": {"x": 100, "y": 200}, "timestamp": "..."}, ...] }
+
+獲取貨物最新資訊:
+POST /vue/cargo - 接收貨物數據
+    { "message": "貨物已儲存", "total_cargo": 250, "saved_count": 250 }
+GET /vue/cargo?limit=100 - 获取貨物數據（默认最近100条）
+    { "cargo": [...], "total": 250 }
+GET /vue/cargo/latest - 获取最新貨物數據
+    { "id": "case 250", "position": {...}, "size": {...}, "timestamp": "..." }
+DELETE /vue/cargo - 清空貨物數據
+    { "message": "貨物數據已清空", "total_cargo": 0 }
 """
