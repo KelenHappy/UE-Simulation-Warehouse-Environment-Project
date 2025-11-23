@@ -503,7 +503,7 @@ onMounted(() => {
             gridMetrics.boxWidth * 0.1,
         );
         const trackThickness = gridMetrics.boxHeight * 0.08;
-        const trackY = gridMetrics.bottomY + trackThickness * 0.5;
+        const trackY = gridMetrics.pillarTopY + trackThickness * 0.5;
 
         const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
         const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
