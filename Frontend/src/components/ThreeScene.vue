@@ -456,13 +456,18 @@ onMounted(() => {
             gridMetrics.boxWidth * 0.1,
         );
         const trackThickness = gridMetrics.boxHeight * 0.08;
-        const trackY = gridMetrics.topY + trackThickness * 0.5 + gridMetrics.boxHeight * 0.02;
+        const trackY = gridMetrics.pillarTopY + trackThickness * 0.5;
 
         const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
         const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
 
         const horizontalLength = gridMetrics.totalWidth + laneWidth;
         const verticalLength = gridMetrics.totalDepth + laneWidth;
+
+        const horizontalRingLength =
+            gridMetrics.totalWidth + laneWidth + gridMetrics.boxWidth + gridMetrics.spacingX;
+        const verticalRingLength =
+            gridMetrics.totalDepth + laneWidth + gridMetrics.boxDepth + gridMetrics.spacingZ;
 
         const createSegment = (length, isHorizontal, position) => {
             const segment = baseModel.clone(true);
@@ -519,6 +524,40 @@ onMounted(() => {
                 new THREE.Vector3(xPos, trackY, 0),
             );
         }
+
+        const leftRingX =
+            gridMetrics.startX - stepX / 2 - gridMetrics.modelCenter.x;
+        const rightRingX =
+            gridMetrics.startX + (gridMetrics.width - 1) * stepX + stepX / 2 -
+            gridMetrics.modelCenter.x;
+        const topRingZ = gridMetrics.startZ - stepZ / 2 - gridMetrics.modelCenter.z;
+        const bottomRingZ =
+            gridMetrics.startZ + (gridMetrics.depth - 1) * stepZ + stepZ / 2 -
+            gridMetrics.modelCenter.z;
+
+        createSegment(
+            horizontalRingLength,
+            true,
+            new THREE.Vector3(0, trackY, topRingZ),
+        );
+
+        createSegment(
+            horizontalRingLength,
+            true,
+            new THREE.Vector3(0, trackY, bottomRingZ),
+        );
+
+        createSegment(
+            verticalRingLength,
+            false,
+            new THREE.Vector3(leftRingX, trackY, 0),
+        );
+
+        createSegment(
+            verticalRingLength,
+            false,
+            new THREE.Vector3(rightRingX, trackY, 0),
+        );
 
         scene.add(trackGroup);
     }
