@@ -2,7 +2,7 @@
     <div class="three-scene-wrapper">
         <div ref="container" class="three-container"></div>
         <div class="controls-hint">
-            <span>🖱️ 左鍵拖曳旋轉 | 滾輪縮放</span>
+            <span>🎮 WASD/方向鍵 移動 | 🖱️ 拖曳旋轉鏡頭</span>
         </div>
     </div>
 </template>
@@ -11,7 +11,6 @@
 import { ref, onMounted, onUnmounted } from "vue";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { useCargoData } from "../composables/useCargoData.js";
 import {
     convertBoxesToCargoData,
@@ -23,10 +22,22 @@ let scene,
     camera,
     renderer,
     boxes = [],
-    controls,
-    baseModel = null;
+    baseModel = null,
+    player = null;
+let yaw = 0;
+let pitch = -0.3;
+const cameraOffset = new THREE.Vector3(0, 2, 6);
+const keyState = new Set();
+let isDragging = false;
+let previousPointer = { x: 0, y: 0 };
+const clock = new THREE.Clock();
 let animationId = null;
 let handleResize = null;
+let handleKeyDown = null;
+let handleKeyUp = null;
+let handlePointerDown = null;
+let handlePointerMove = null;
+let handlePointerUp = null;
 
 // 使用 cargo 數據管理
 const {
@@ -55,7 +66,7 @@ onMounted(() => {
         0.1,
         1000,
     );
-    camera.position.set(0, 0, 5);
+    camera.position.set(0, 2, 8);
 
     // 創建渲染器
     renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -69,15 +80,6 @@ onMounted(() => {
     renderer.domElement.style.touchAction = "none";
 
     container.value.appendChild(renderer.domElement);
-
-    // 創建軌道控制器（支持拖曳和旋轉）
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; // 啟用阻尼效果，使旋轉更平滑
-    controls.dampingFactor = 0.05; // 阻尼係數
-    controls.enableZoom = true; // 啟用縮放
-    controls.enablePan = false; // 禁用平移（不使用右鍵）
-    controls.minDistance = 1; // 最小縮放距離
-    controls.maxDistance = 100; // 最大縮放距離
 
     // 添加環境光
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -200,6 +202,9 @@ onMounted(() => {
 
             // 調整相機位置
             adjustCamera(5, 10, 5, modelSize);
+
+            // 建立可控制的玩家模型
+            createPlayer(modelSize);
         },
         (progress) => {
             console.log(
@@ -397,28 +402,140 @@ onMounted(() => {
         const totalDepth = depth * boxDepth + (depth - 1) * spacingZ;
         const totalHeight = height * boxHeight + (height - 1) * spacingY;
 
-        // 調整相機位置以適應所有方塊
+        // 調整相機初始距離以適應所有方塊
         const maxDim = Math.max(totalWidth, totalDepth, totalHeight);
         const fov = camera.fov * (Math.PI / 180);
         let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
-        cameraZ *= 1.8; // 添加一些邊距
+        cameraZ *= 1.6; // 添加一些邊距
 
-        // 設置相機位置，從側上方觀看
-        camera.position.set(cameraZ * 0.7, cameraZ * 0.7, cameraZ * 0.7);
-
-        // 設置控制器目標為陣列中心（原點）
-        controls.target.set(0, 0, 0);
-        controls.update();
+        cameraOffset.set(0, Math.max(1.8, cameraZ * 0.2), cameraZ * 0.6);
     }
+
+    function createPlayer(modelSize) {
+        const playerGeometry = new THREE.CapsuleGeometry(
+            modelSize.x * 0.15,
+            modelSize.y * 0.2,
+            8,
+            16,
+        );
+        const playerMaterial = new THREE.MeshStandardMaterial({
+            color: 0x54a6ff,
+            roughness: 0.4,
+            metalness: 0.2,
+            emissive: 0x123456,
+            emissiveIntensity: 0.25,
+        });
+
+        player = new THREE.Mesh(playerGeometry, playerMaterial);
+        player.castShadow = true;
+        player.receiveShadow = true;
+        player.position.set(0, modelSize.y * 0.5, Math.max(modelSize.z * 2, 3));
+        scene.add(player);
+    }
+
+    function updatePlayer(delta) {
+        if (!player) return;
+
+        const moveSpeed = 6.5;
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+        const right = new THREE.Vector3()
+            .crossVectors(new THREE.Vector3(0, 1, 0), forward)
+            .normalize();
+
+        const direction = new THREE.Vector3();
+        if (keyState.has("KeyW") || keyState.has("ArrowUp")) {
+            direction.add(forward);
+        }
+        if (keyState.has("KeyS") || keyState.has("ArrowDown")) {
+            direction.sub(forward);
+        }
+        if (keyState.has("KeyA") || keyState.has("ArrowLeft")) {
+            direction.sub(right);
+        }
+        if (keyState.has("KeyD") || keyState.has("ArrowRight")) {
+            direction.add(right);
+        }
+
+        if (direction.lengthSq() > 0) {
+            direction.normalize();
+            player.position.addScaledVector(direction, moveSpeed * delta);
+        }
+
+        // 讓玩家朝向移動方向
+        if (direction.lengthSq() > 0.0001) {
+            const targetQuaternion = new THREE.Quaternion().setFromRotationMatrix(
+                new THREE.Matrix4().lookAt(
+                    new THREE.Vector3(0, 0, 0),
+                    direction,
+                    new THREE.Vector3(0, 1, 0),
+                ),
+            );
+            player.quaternion.slerp(targetQuaternion, 0.2);
+        }
+    }
+
+    function updateCamera() {
+        if (!player) return;
+
+        const rotation = new THREE.Quaternion().setFromEuler(
+            new THREE.Euler(pitch, yaw, 0, "YXZ"),
+        );
+        const rotatedOffset = cameraOffset.clone().applyQuaternion(rotation);
+
+        camera.position.copy(player.position).add(rotatedOffset);
+        camera.lookAt(player.position.clone().add(new THREE.Vector3(0, 1, 0)));
+    }
+
+    function registerInputs() {
+        handleKeyDown = (event) => {
+            keyState.add(event.code);
+        };
+
+        handleKeyUp = (event) => {
+            keyState.delete(event.code);
+        };
+
+        handlePointerDown = (event) => {
+            isDragging = true;
+            previousPointer = { x: event.clientX, y: event.clientY };
+        };
+
+        handlePointerMove = (event) => {
+            if (!isDragging) return;
+            const deltaX = event.clientX - previousPointer.x;
+            const deltaY = event.clientY - previousPointer.y;
+            previousPointer = { x: event.clientX, y: event.clientY };
+
+            const sensitivity = 0.005;
+            yaw -= deltaX * sensitivity;
+            pitch -= deltaY * sensitivity;
+            const pitchLimit = Math.PI / 2 - 0.1;
+            pitch = Math.max(-pitchLimit, Math.min(pitchLimit, pitch));
+        };
+
+        handlePointerUp = () => {
+            isDragging = false;
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
+        renderer.domElement.addEventListener("mousedown", handlePointerDown);
+        window.addEventListener("mousemove", handlePointerMove);
+        window.addEventListener("mouseup", handlePointerUp);
+    }
+
+    registerInputs();
 
     // 動畫循環
     const animate = () => {
         animationId = requestAnimationFrame(animate);
 
-        // 更新控制器（必須在每一幀調用，如果啟用了阻尼）
-        if (controls) {
-            controls.update();
-        }
+        const delta = clock.getDelta();
+        updatePlayer(delta);
+        updateCamera();
 
         renderer.render(scene, camera);
     };
@@ -449,15 +566,18 @@ onUnmounted(() => {
         window.removeEventListener("resize", handleResize);
     }
 
-    // 清理控制器
-    if (controls) {
-        controls.dispose();
-    }
-
     // 清理 Three.js 資源
     if (container.value && renderer && renderer.domElement) {
         container.value.removeChild(renderer.domElement);
     }
+
+    // 清理事件監聽器
+    if (handleKeyDown) window.removeEventListener("keydown", handleKeyDown);
+    if (handleKeyUp) window.removeEventListener("keyup", handleKeyUp);
+    if (handlePointerDown)
+        renderer?.domElement?.removeEventListener("mousedown", handlePointerDown);
+    if (handlePointerMove) window.removeEventListener("mousemove", handlePointerMove);
+    if (handlePointerUp) window.removeEventListener("mouseup", handlePointerUp);
 
     // 清理方塊資源（GLTF 模型）
     boxes.forEach((box) => {
