@@ -36,7 +36,13 @@ let scene,
     renderer,
     boxes = [],
     baseModel = null,
+    trackPieces = [],
     player = null;
+const unloadBays = [
+    { cells: ["0-0", "1-0"], protrudeSteps: 1 },
+    { cells: ["3-0", "4-0"], protrudeSteps: 1 },
+];
+const unloadAreaCells = new Set(unloadBays.flatMap((bay) => bay.cells));
 let yaw = 0;
 let pitch = -0.3;
 const cameraOffset = new THREE.Vector3(0, 2, 6);
@@ -212,10 +218,22 @@ onMounted(() => {
             console.log("最終邊界框:", finalMin, "到", finalMax);
 
             // 創建方塊陣列 (5x10x5 = 250個)
-            createBoxGridFromModel(5, 10, 5, modelSize, modelCenter);
+            const gridMetrics = createBoxGridFromModel(
+                5,
+                10,
+                5,
+                modelSize,
+                modelCenter,
+            );
 
             // 調整相機位置
             adjustCamera(5, 10, 5, modelSize);
+
+            // 使用 blue_box.glb 打造高於貨物的環形軌道
+            createTrackLoop(gridMetrics);
+
+            // 建立卸貨區並鋪設軌道
+            createUnloadAreas(gridMetrics);
 
             // 建立可控制的玩家模型
             createPlayer(modelSize);
@@ -232,13 +250,7 @@ onMounted(() => {
     );
 
     // 從模型創建方塊網格的函數
-    function createBoxGridFromModel(
-        width,
-        depth,
-        height,
-        modelSize,
-        modelCenter,
-    ) {
+    function createBoxGridFromModel(width, depth, height, modelSize, modelCenter) {
         // 使用模型的實際尺寸（確保為正數）
         const boxWidth = Math.max(Math.abs(modelSize.x), 0.01);
         const boxDepth = Math.max(Math.abs(modelSize.z), 0.01);
@@ -262,6 +274,11 @@ onMounted(() => {
         const startZ = -totalDepth / 2 + boxDepth / 2;
         const startY = -totalHeight / 2 + boxHeight / 2;
 
+        const topLayerCenterY = startY + (height - 1) * (boxHeight + spacingY);
+        const topY = topLayerCenterY - modelCenter.y + boxHeight / 2;
+        const pillarTopY = topY + boxHeight;
+        const bottomY = startY - modelCenter.y - boxHeight / 2;
+
         // 創建白色材質（用於支柱）
         const shelfMaterial = new THREE.MeshStandardMaterial({
             color: 0xffffff,
@@ -275,7 +292,13 @@ onMounted(() => {
         // 創建方塊
         for (let x = 0; x < width; x++) {
             for (let z = 0; z < depth; z++) {
+                const isUnloadCell = unloadAreaCells.has(`${x}-${z}`);
+
                 for (let y = 0; y < height; y++) {
+                    if (isUnloadCell) {
+                        continue;
+                    }
+
                     const targetCenterX = startX + x * (boxWidth + spacingX);
                     const targetCenterZ = startZ + z * (boxDepth + spacingZ);
                     const targetCenterY = startY + y * (boxHeight + spacingY);
@@ -305,17 +328,6 @@ onMounted(() => {
             for (let z = 0; z < depth; z++) {
                 const targetCenterX = startX + x * (boxWidth + spacingX);
                 const targetCenterZ = startZ + z * (boxDepth + spacingZ);
-
-                // 計算最高層方塊的頂部
-                const topLayerCenterY =
-                    startY + (height - 1) * (boxHeight + spacingY);
-                const topY = topLayerCenterY - modelCenter.y + boxHeight / 2;
-
-                // 支柱頂部：最高層頂部 + 再往上一格的高度
-                const pillarTopY = topY + boxHeight;
-
-                // 計算最低層方塊的底部（地面）
-                const bottomY = startY - modelCenter.y - boxHeight / 2;
 
                 // 支柱高度
                 const pillarHeight = pillarTopY - bottomY;
@@ -400,6 +412,28 @@ onMounted(() => {
         }).catch((err) => {
             console.error("✗ 儲存貨物數據異常:", err);
         });
+
+        return {
+            width,
+            depth,
+            height,
+            boxWidth,
+            boxDepth,
+            boxHeight,
+            spacingX,
+            spacingZ,
+            spacingY,
+            totalWidth,
+            totalDepth,
+            totalHeight,
+            startX,
+            startY,
+            startZ,
+            topY,
+            pillarTopY,
+            bottomY,
+            modelCenter,
+        };
     }
 
     // 調整相機位置的函數
@@ -423,6 +457,191 @@ onMounted(() => {
         cameraZ *= 1.6; // 添加一些邊距
 
         cameraOffset.set(0, Math.max(1.8, cameraZ * 0.2), cameraZ * 0.6);
+    }
+
+    function createTrackSegment({
+        sizeX,
+        sizeZ,
+        position,
+        gridMetrics,
+        trackThickness,
+        parent,
+    }) {
+        const segment = baseModel.clone(true);
+        segment.traverse((child) => {
+            if (child.isMesh || child.isGroup || child.isObject3D) {
+                resetTransform(child);
+            }
+            if (child.isMesh) {
+                child.material = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    metalness: 0.08,
+                    roughness: 0.3,
+                    emissive: 0x2a2a2a,
+                    emissiveIntensity: 0.2,
+                });
+            }
+        });
+
+        resetTransform(segment);
+        segment.scale.set(
+            sizeX / gridMetrics.boxWidth,
+            trackThickness / gridMetrics.boxHeight,
+            sizeZ / gridMetrics.boxDepth,
+        );
+        segment.position.copy(position);
+        trackPieces.push(segment);
+        (parent || scene).add(segment);
+    }
+
+    function createTrackLoop(gridMetrics) {
+        if (!baseModel) return;
+
+        const trackGroup = new THREE.Group();
+        const laneWidth = Math.max(
+            Math.min(gridMetrics.spacingX, gridMetrics.spacingZ) * 0.8,
+            gridMetrics.boxWidth * 0.1,
+        );
+        const trackThickness = gridMetrics.boxHeight * 0.08;
+        const trackY = gridMetrics.pillarTopY + trackThickness * 0.5;
+
+        const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
+        const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
+
+        const horizontalLength = gridMetrics.totalWidth + laneWidth;
+        const verticalLength = gridMetrics.totalDepth + laneWidth;
+
+        for (let z = 0; z < gridMetrics.depth - 1; z++) {
+            const zPos =
+                gridMetrics.startZ + (z + 0.5) * stepZ - gridMetrics.modelCenter.z;
+            createTrackSegment({
+                sizeX: horizontalLength,
+                sizeZ: laneWidth,
+                position: new THREE.Vector3(0, trackY, zPos),
+                gridMetrics,
+                trackThickness,
+                parent: trackGroup,
+            });
+        }
+
+        for (let x = 0; x < gridMetrics.width - 1; x++) {
+            const xPos =
+                gridMetrics.startX + (x + 0.5) * stepX - gridMetrics.modelCenter.x;
+            createTrackSegment({
+                sizeX: laneWidth,
+                sizeZ: verticalLength,
+                position: new THREE.Vector3(xPos, trackY, 0),
+                gridMetrics,
+                trackThickness,
+                parent: trackGroup,
+            });
+        }
+
+        const leftRingX =
+            gridMetrics.startX - stepX / 2 - gridMetrics.modelCenter.x;
+        const rightRingX =
+            gridMetrics.startX + (gridMetrics.width - 1) * stepX + stepX / 2 -
+            gridMetrics.modelCenter.x;
+        const topRingZ = gridMetrics.startZ - stepZ / 2 - gridMetrics.modelCenter.z;
+        const bottomRingZ =
+            gridMetrics.startZ + (gridMetrics.depth - 1) * stepZ + stepZ / 2 -
+            gridMetrics.modelCenter.z;
+
+        const horizontalRingSpan = rightRingX - leftRingX;
+        const verticalRingSpan = bottomRingZ - topRingZ;
+        const ringCenterX = (leftRingX + rightRingX) / 2;
+        const ringCenterZ = (topRingZ + bottomRingZ) / 2;
+        const horizontalRingLength = Math.max(
+            horizontalRingSpan - laneWidth,
+            laneWidth,
+        );
+        const verticalRingLength = Math.max(verticalRingSpan - laneWidth, laneWidth);
+
+        createTrackSegment({
+            sizeX: horizontalRingLength,
+            sizeZ: laneWidth,
+            position: new THREE.Vector3(ringCenterX, trackY, topRingZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
+
+        createTrackSegment({
+            sizeX: horizontalRingLength,
+            sizeZ: laneWidth,
+            position: new THREE.Vector3(ringCenterX, trackY, bottomRingZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
+
+        createTrackSegment({
+            sizeX: laneWidth,
+            sizeZ: verticalRingLength,
+            position: new THREE.Vector3(leftRingX, trackY, ringCenterZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
+
+        createTrackSegment({
+            sizeX: laneWidth,
+            sizeZ: verticalRingLength,
+            position: new THREE.Vector3(rightRingX, trackY, ringCenterZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
+
+        scene.add(trackGroup);
+    }
+
+    function createUnloadAreas(gridMetrics) {
+        if (!baseModel || unloadBays.length === 0) return;
+
+        const trackThickness = gridMetrics.boxHeight * 0.08;
+        const trackY = gridMetrics.bottomY + trackThickness * 0.5;
+        const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
+        const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
+
+        unloadBays.forEach((bay) => {
+            const unloadCells = bay.cells.map((cellKey) => {
+                const [x, z] = cellKey.split("-").map(Number);
+                return { x, z };
+            });
+
+            const minX = Math.min(...unloadCells.map((cell) => cell.x));
+            const maxX = Math.max(...unloadCells.map((cell) => cell.x));
+            const minZ = Math.min(...unloadCells.map((cell) => cell.z));
+            const maxZ = Math.max(...unloadCells.map((cell) => cell.z));
+
+            const basePadWidth =
+                (maxX - minX + 1) * gridMetrics.boxWidth +
+                (maxX - minX) * gridMetrics.spacingX;
+            const basePadDepth =
+                (maxZ - minZ + 1) * gridMetrics.boxDepth +
+                (maxZ - minZ) * gridMetrics.spacingZ;
+
+            const protrudeDepth = Math.max(0, bay.protrudeSteps || 0) * stepZ;
+            const padWidth = basePadWidth;
+            const padDepth = basePadDepth + protrudeDepth;
+
+            const centerX =
+                gridMetrics.startX + ((minX + maxX) / 2) * stepX -
+                gridMetrics.modelCenter.x;
+            const baseCenterZ =
+                gridMetrics.startZ + ((minZ + maxZ) / 2) * stepZ -
+                gridMetrics.modelCenter.z;
+            const centerZ = baseCenterZ - protrudeDepth / 2;
+
+            createTrackSegment({
+                sizeX: padWidth,
+                sizeZ: padDepth,
+                position: new THREE.Vector3(centerX, trackY, centerZ),
+                gridMetrics,
+                trackThickness,
+            });
+        });
     }
 
     function createPlayer(modelSize) {
@@ -638,6 +857,23 @@ onUnmounted(() => {
         scene.remove(box);
     });
     boxes = [];
+
+    trackPieces.forEach((track) => {
+        track.traverse((child) => {
+            if (child.isMesh) {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach((material) => material.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
+                }
+            }
+        });
+        scene.remove(track);
+    });
+    trackPieces = [];
 
     // 清理基礎模型
     if (baseModel) {
