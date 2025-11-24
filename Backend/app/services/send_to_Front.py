@@ -45,7 +45,7 @@ def load_cargo_data():
         else:
             _cargo_db = []
     except Exception as e:
-        print(f"加载货物数据失败: {e}")
+        print(f"加載貨物數據失敗: {e}")
         _cargo_db = []
 
 
@@ -57,7 +57,7 @@ def save_cargo_data():
         with open(CARGO_DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(_cargo_db, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"保存货物数据失败: {e}")
+        print(f"保存貨物數據失敗: {e}")
         raise
 
 
@@ -203,7 +203,7 @@ GET /vue/orders?limit=20 - 取得最近20筆訂單
       "items": [12,34,56],
       "timestamp": "..."
     }
-GET /vue/orders/latest - 取得最新訂單
+GET /vue/order/latest - 取得最新訂單
     { "id": 3, "content": "12-34-56", "items": [12,34,56], "timestamp": "..." }
 POST /vue/ack - 確認訂單
     { "ok": true }
@@ -217,9 +217,9 @@ GET /vue/telemetry - 取得玩家位置和動作資料
 獲取貨物最新資訊:
 POST /vue/cargo - 接收貨物數據
     { "message": "貨物已儲存", "total_cargo": 250, "saved_count": 250 }
-GET /vue/cargo?limit=100 - 获取貨物數據（默认最近100条）
+GET /vue/cargo?limit=100 - 取得貨物數據
     { "cargo": [...], "total": 250 }
-GET /vue/cargo/latest - 获取最新貨物數據
+GET /vue/cargo/latest - 取得最新貨物數據
     { "id": "case 250", "position": {...}, "size": {...}, "timestamp": "..." }
 DELETE /vue/cargo - 清空貨物數據
     { "message": "貨物數據已清空", "total_cargo": 0 }
