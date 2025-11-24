@@ -15,8 +15,12 @@ export function convertBoxesToCargoData(boxes, modelSize) {
   const timestamp = new Date().toISOString();
 
   return boxes.map((box, index) => {
+    const boxId = box.userData?.boxId ?? index + 1;
+    const productName = box.userData?.productName ?? `商品 ${boxId}`;
+
     return {
-      id: `case ${index + 1}`,
+      id: `case ${boxId}`,
+      productName,
       position: {
         x: parseFloat(box.position.x.toFixed(4)),
         y: parseFloat(box.position.y.toFixed(4)),
