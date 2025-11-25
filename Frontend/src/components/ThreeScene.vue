@@ -17,6 +17,16 @@
                 <span class="speed-value">{{ moveSpeed.toFixed(1) }}</span>
             </label>
         </div>
+        <div
+            v-if="hoveredBoxInfo"
+            class="box-tooltip"
+            :style="{ left: `${tooltipPosition.x}px`, top: `${tooltipPosition.y}px` }"
+        >
+            <div class="tooltip-label">箱子編號</div>
+            <div class="tooltip-id">#{{ hoveredBoxInfo.boxId }}</div>
+            <div class="tooltip-label">商品名稱</div>
+            <div class="tooltip-name">{{ hoveredBoxInfo.productName }}</div>
+        </div>
     </div>
 </template>
 
@@ -58,6 +68,11 @@ let handleKeyUp = null;
 let handlePointerDown = null;
 let handlePointerMove = null;
 let handlePointerUp = null;
+let handleMouseLeave = null;
+const hoveredBoxInfo = ref(null);
+const tooltipPosition = ref({ x: 0, y: 0 });
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
 
 // 使用 cargo 數據管理
 const {
@@ -316,6 +331,11 @@ onMounted(() => {
                         targetCenterY - modelCenter.y,
                         targetCenterZ - modelCenter.z,
                     );
+                    const boxId = boxes.length + 1;
+                    clonedModel.userData = {
+                        boxId,
+                        productName: `商品 ${boxId}`,
+                    };
                     clonedModel.updateMatrixWorld(true);
                     scene.add(clonedModel);
                     boxes.push(clonedModel);
@@ -730,6 +750,59 @@ onMounted(() => {
         camera.lookAt(player.position.clone().add(new THREE.Vector3(0, 1, 0)));
     }
 
+    function findParentBox(object) {
+        let current = object;
+
+        while (current) {
+            if (boxes.includes(current)) {
+                return current;
+            }
+            current = current.parent;
+        }
+
+        return null;
+    }
+
+    function updateHoverInfo(event) {
+        if (!renderer || !camera || !container.value) return;
+
+        const rect = renderer.domElement.getBoundingClientRect();
+        if (
+            event.clientX < rect.left ||
+            event.clientX > rect.right ||
+            event.clientY < rect.top ||
+            event.clientY > rect.bottom
+        ) {
+            hoveredBoxInfo.value = null;
+            return;
+        }
+
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(boxes, true);
+
+        if (intersects.length > 0) {
+            const box = findParentBox(intersects[0].object);
+
+            if (box && box.userData?.boxId) {
+                const containerRect = container.value.getBoundingClientRect();
+                hoveredBoxInfo.value = {
+                    boxId: box.userData.boxId,
+                    productName: box.userData.productName,
+                };
+                tooltipPosition.value = {
+                    x: event.clientX - containerRect.left,
+                    y: event.clientY - containerRect.top,
+                };
+                return;
+            }
+        }
+
+        hoveredBoxInfo.value = null;
+    }
+
     function registerInputs() {
         handleKeyDown = (event) => {
             const handledKeys = [
@@ -762,6 +835,7 @@ onMounted(() => {
         };
 
         handlePointerMove = (event) => {
+            updateHoverInfo(event);
             if (!isDragging) return;
             const deltaX = event.clientX - previousPointer.x;
             const deltaY = event.clientY - previousPointer.y;
@@ -778,11 +852,16 @@ onMounted(() => {
             isDragging = false;
         };
 
+        handleMouseLeave = () => {
+            hoveredBoxInfo.value = null;
+        };
+
         window.addEventListener("keydown", handleKeyDown);
         window.addEventListener("keyup", handleKeyUp);
         renderer.domElement.addEventListener("mousedown", handlePointerDown);
         window.addEventListener("mousemove", handlePointerMove);
         window.addEventListener("mouseup", handlePointerUp);
+        renderer.domElement.addEventListener("mouseleave", handleMouseLeave);
     }
 
     registerInputs();
@@ -836,6 +915,8 @@ onUnmounted(() => {
         renderer?.domElement?.removeEventListener("mousedown", handlePointerDown);
     if (handlePointerMove) window.removeEventListener("mousemove", handlePointerMove);
     if (handlePointerUp) window.removeEventListener("mouseup", handlePointerUp);
+    if (handleMouseLeave)
+        renderer?.domElement?.removeEventListener("mouseleave", handleMouseLeave);
 
     // 清理方塊資源（GLTF 模型）
     boxes.forEach((box) => {
@@ -962,5 +1043,39 @@ onUnmounted(() => {
     min-width: 40px;
     display: inline-block;
     text-align: right;
+}
+
+.box-tooltip {
+    position: absolute;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    border-radius: 8px;
+    font-size: 12px;
+    pointer-events: none;
+    transform: translate(12px, -12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    z-index: 12;
+    backdrop-filter: blur(6px);
+    min-width: 160px;
+}
+
+.tooltip-label {
+    font-size: 11px;
+    color: #cbd5e1;
+    letter-spacing: 0.5px;
+}
+
+.tooltip-id {
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 6px;
+    color: #a5b4fc;
+}
+
+.tooltip-name {
+    font-weight: 600;
+    color: #f9fafb;
 }
 </style>
