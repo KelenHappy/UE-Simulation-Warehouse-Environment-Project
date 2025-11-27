@@ -151,9 +151,13 @@ async def Vue_list_telemetry(limit: int = 100):
 # 貨物網路功能
 @router.post("/cargo")
 async def receive_cargo_data(cargo_data: List[Cargo]):
-    """接收並儲存"""
+    """接收並儲存（替換現有數據）"""
+    global _cargo_db
     try:
-        # 将货物数据转换为字典格式并添加到内存数据库
+        # 清空現有數據，用新數據替換
+        _cargo_db = []
+        
+        # 将货物数据转换为字典格式
         for cargo in cargo_data:
             cargo_dict = cargo.dict()
             _cargo_db.append(cargo_dict)
