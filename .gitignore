@@ -61,4 +61,5 @@ AutoWarehouse/Content.zip
 AutoWarehouse/Content.7z
 AutoWarehouse/Content.tar.gz
 AutoWarehouse/Content.*
-Frontend/node_modules/*
+Frontend/node_modules/
+Backend/data/*.json

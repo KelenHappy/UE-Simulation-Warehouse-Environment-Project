@@ -55,7 +55,7 @@ export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
     const usedNumbers = new Set()
 
     while (usedNumbers.size < count) {
-      const randomNum = Math.floor(Math.random() * 100) + 1
+      const randomNum = Math.floor(Math.random() * 230) + 1
       usedNumbers.add(randomNum)
     }
 
