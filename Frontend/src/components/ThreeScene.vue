@@ -39,6 +39,7 @@ import {
     convertBoxesToCargoData,
     saveCargoDataToBackend,
 } from "../utils/cargoStorage.js";
+import { CarManager } from "../utils/carManager.js";
 
 const container = ref(null);
 let scene,
@@ -62,6 +63,8 @@ let isDragging = false;
 let previousPointer = { x: 0, y: 0 };
 const clock = new THREE.Clock();
 let animationId = null;
+let carManager = null; // 車子管理器
+let trackGauge = 0; // 軌距（兩條軌道之間的距離）
 let handleResize = null;
 let handleKeyDown = null;
 let handleKeyUp = null;
@@ -93,6 +96,9 @@ onMounted(() => {
     // 創建場景
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x222222);
+    
+    // 初始化車子管理器
+    carManager = new CarManager(scene);
 
     // 創建相機
     camera = new THREE.PerspectiveCamera(
@@ -252,6 +258,12 @@ onMounted(() => {
 
             // 建立可控制的玩家模型
             createPlayer(modelSize);
+
+            // 在軌道上添加移動的車子
+            if (carManager) {
+                carManager.createCars(gridMetrics);
+                trackGauge = carManager.getTrackGauge();
+            }
         },
         (progress) => {
             console.log(
@@ -522,6 +534,11 @@ onMounted(() => {
             Math.min(gridMetrics.spacingX, gridMetrics.spacingZ) * 0.8,
             gridMetrics.boxWidth * 0.1,
         );
+        
+        // 雙軌道系統：兩條細軌道
+        const railWidth = laneWidth * 0.15; // 每條軌道的寬度（細）
+        trackGauge = laneWidth * 0.6; // 軌距（兩條軌道中心之間的距離）
+        
         const trackThickness = gridMetrics.boxHeight * 0.08;
         const trackY = gridMetrics.pillarTopY + trackThickness * 0.5;
 
@@ -531,26 +548,52 @@ onMounted(() => {
         const horizontalLength = gridMetrics.totalWidth + laneWidth;
         const verticalLength = gridMetrics.totalDepth + laneWidth;
 
+        // 創建雙軌道（橫向）
         for (let z = 0; z < gridMetrics.depth - 1; z++) {
             const zPos =
                 gridMetrics.startZ + (z + 0.5) * stepZ - gridMetrics.modelCenter.z;
+            
+            // 左軌道
             createTrackSegment({
                 sizeX: horizontalLength,
-                sizeZ: laneWidth,
-                position: new THREE.Vector3(0, trackY, zPos),
+                sizeZ: railWidth,
+                position: new THREE.Vector3(-trackGauge / 2, trackY, zPos),
+                gridMetrics,
+                trackThickness,
+                parent: trackGroup,
+            });
+            
+            // 右軌道
+            createTrackSegment({
+                sizeX: horizontalLength,
+                sizeZ: railWidth,
+                position: new THREE.Vector3(trackGauge / 2, trackY, zPos),
                 gridMetrics,
                 trackThickness,
                 parent: trackGroup,
             });
         }
 
+        // 創建雙軌道（縱向）
         for (let x = 0; x < gridMetrics.width - 1; x++) {
             const xPos =
                 gridMetrics.startX + (x + 0.5) * stepX - gridMetrics.modelCenter.x;
+            
+            // 前軌道
             createTrackSegment({
-                sizeX: laneWidth,
+                sizeX: railWidth,
                 sizeZ: verticalLength,
-                position: new THREE.Vector3(xPos, trackY, 0),
+                position: new THREE.Vector3(xPos, trackY, -trackGauge / 2),
+                gridMetrics,
+                trackThickness,
+                parent: trackGroup,
+            });
+            
+            // 後軌道
+            createTrackSegment({
+                sizeX: railWidth,
+                sizeZ: verticalLength,
+                position: new THREE.Vector3(xPos, trackY, trackGauge / 2),
                 gridMetrics,
                 trackThickness,
                 parent: trackGroup,
@@ -577,37 +620,73 @@ onMounted(() => {
         );
         const verticalRingLength = Math.max(verticalRingSpan - laneWidth, laneWidth);
 
+        // 外環雙軌道 - 頂部
         createTrackSegment({
             sizeX: horizontalRingLength,
-            sizeZ: laneWidth,
-            position: new THREE.Vector3(ringCenterX, trackY, topRingZ),
+            sizeZ: railWidth,
+            position: new THREE.Vector3(ringCenterX, trackY, topRingZ - trackGauge / 2),
             gridMetrics,
             trackThickness,
             parent: trackGroup,
         });
-
         createTrackSegment({
             sizeX: horizontalRingLength,
-            sizeZ: laneWidth,
-            position: new THREE.Vector3(ringCenterX, trackY, bottomRingZ),
+            sizeZ: railWidth,
+            position: new THREE.Vector3(ringCenterX, trackY, topRingZ + trackGauge / 2),
             gridMetrics,
             trackThickness,
             parent: trackGroup,
         });
 
+        // 外環雙軌道 - 底部
         createTrackSegment({
-            sizeX: laneWidth,
-            sizeZ: verticalRingLength,
-            position: new THREE.Vector3(leftRingX, trackY, ringCenterZ),
+            sizeX: horizontalRingLength,
+            sizeZ: railWidth,
+            position: new THREE.Vector3(ringCenterX, trackY, bottomRingZ - trackGauge / 2),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
+        createTrackSegment({
+            sizeX: horizontalRingLength,
+            sizeZ: railWidth,
+            position: new THREE.Vector3(ringCenterX, trackY, bottomRingZ + trackGauge / 2),
             gridMetrics,
             trackThickness,
             parent: trackGroup,
         });
 
+        // 外環雙軌道 - 左側
         createTrackSegment({
-            sizeX: laneWidth,
+            sizeX: railWidth,
             sizeZ: verticalRingLength,
-            position: new THREE.Vector3(rightRingX, trackY, ringCenterZ),
+            position: new THREE.Vector3(leftRingX - trackGauge / 2, trackY, ringCenterZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
+        createTrackSegment({
+            sizeX: railWidth,
+            sizeZ: verticalRingLength,
+            position: new THREE.Vector3(leftRingX + trackGauge / 2, trackY, ringCenterZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
+
+        // 外環雙軌道 - 右側
+        createTrackSegment({
+            sizeX: railWidth,
+            sizeZ: verticalRingLength,
+            position: new THREE.Vector3(rightRingX - trackGauge / 2, trackY, ringCenterZ),
+            gridMetrics,
+            trackThickness,
+            parent: trackGroup,
+        });
+        createTrackSegment({
+            sizeX: railWidth,
+            sizeZ: verticalRingLength,
+            position: new THREE.Vector3(rightRingX + trackGauge / 2, trackY, ringCenterZ),
             gridMetrics,
             trackThickness,
             parent: trackGroup,
@@ -615,6 +694,8 @@ onMounted(() => {
 
         scene.add(trackGroup);
     }
+
+
 
     function createUnloadAreas(gridMetrics) {
         if (!baseModel || unloadBays.length === 0) return;
@@ -872,6 +953,9 @@ onMounted(() => {
 
         const delta = clock.getDelta();
         updatePlayer(delta);
+        if (carManager) {
+            carManager.update(delta); // 更新車子位置
+        }
         updateCamera();
 
         renderer.render(scene, camera);
@@ -972,6 +1056,12 @@ onUnmounted(() => {
                 }
             }
         });
+    }
+
+    // 清理車子管理器
+    if (carManager) {
+        carManager.dispose();
+        carManager = null;
     }
 
     if (renderer) renderer.dispose();
