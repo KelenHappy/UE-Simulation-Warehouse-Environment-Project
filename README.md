@@ -2,7 +2,7 @@
 
 #  發送訂單 -> WebSocket 存入資料 -> Three.js 顯示 
 
-## 🏗️ 專案架構
+## 專案架構
 
 ```
 Simulation-Warehouse-Environment-Project/
@@ -25,7 +25,7 @@ Simulation-Warehouse-Environment-Project/
 └── start_demo.sh          # 啟動腳本
 ```
 
-## 🚀 快速開始
+## 快速開始
 
 ### 1. 安裝依賴項
 
@@ -40,7 +40,7 @@ Simulation-Warehouse-Environment-Project/
 - **前端介面**: http://localhost:5173
 - **WebSocket 端點**: ws://localhost:8000/ws/{client_type}/{client_id}
 
-## 🎯 前端功能特色
+## 前端功能特色
 
 ### 訂單管理系統
 
@@ -60,8 +60,8 @@ Vue.js 前端提供一個訂單管理介面：
 - 即時預覽訂單格式
 
 **操作功能**:
-- **🎲 隨機生成**: 自動產生 3-7 個隨機數字
-- **📤 送出訂單**: 將數字組合提交為訂單
+- **隨機生成**: 自動產生 3-7 個隨機數字
+- **送出訂單**: 將數字組合提交為訂單
 - **清空數字**: 一鍵清除所有輸入
 - **快速新增**: 可選擇新增 3 或 5 個數字框
 
@@ -92,19 +92,16 @@ bun run build
 
 # 後端部署
 cd Backend
-# 使用 uvicorn 或 gunicorn 部署
-```
-
-### 測試 WebSocket 連接
-
-```python
-# 運行測試腳本
-cd Backend
-python tests/test_websocket.py
+# 如果還沒建
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirement.txt
+# 執行
+python3 app/main.py
 ```
 ## 3D Model
 [Comfy UI](https://github.com/comfyanonymous/ComfyUI)
-[hunyuan3D](https://huggingface.co/Comfy-Org/hunyuan3D_2.1_repackaged/tree/main)
+
 ## 📄 授權
 
 此專案僅供教育和演示用途。
