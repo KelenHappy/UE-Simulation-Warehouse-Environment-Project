@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { useCargoData } from "../../../composables/useCargoData.js";
+import { ref } from "vue";
 import { convertBoxesToCargoData, saveCargoDataToBackend } from "../../../utils/cargoStorage.js";
 import { CarManager } from "../../../utils/carManager.js";
 import { createScene } from '../utils/sceneSetup';
@@ -20,6 +20,9 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
     const clock = new THREE.Clock();
     let animationId = null;
     let eventHandlers = {};
+    const carOptions = ref([]);
+    const destinationOptions = ref([]);
+    const routeStatus = ref("選擇車輛與目的地後派送");
 
     const unloadBays = [
         { cells: ["0-0", "1-0"], protrudeSteps: 1 },
@@ -55,11 +58,21 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                     player = createPlayer(scene, metrics.modelSize);
                     if (carManager) {
                         carManager.createCars(metrics);
+                        carOptions.value = carManager.getCarOptions();
+                        destinationOptions.value = carManager.getDestinationOptions();
+                        routeStatus.value = "車輛已載入，請選擇目的地";
                     }
                     saveBoxData(boxes, metrics.modelSize);
                 }
             });
         });
+    }
+
+    function setCarDestination(carId, destinationId) {
+        if (!carManager) return false;
+        const result = carManager.setDestination(carId, destinationId);
+        routeStatus.value = result.message;
+        return result.success;
     }
 
     function processModel(originalScene) {
@@ -243,5 +256,12 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         renderer?.dispose();
     }
 
-    return { init, cleanup };
+    return {
+        init,
+        cleanup,
+        carOptions,
+        destinationOptions,
+        routeStatus,
+        setCarDestination,
+    };
 }

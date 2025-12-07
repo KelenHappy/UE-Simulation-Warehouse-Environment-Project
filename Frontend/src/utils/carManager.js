@@ -11,6 +11,10 @@ export class CarManager {
         this.cars = [];
         this.carSpeed = 2.0;
         this.trackGauge = 0; // 軌距
+        this.gridMetrics = null;
+        this.trackY = 0;
+        this.stepX = 0;
+        this.stepZ = 0;
     }
 
     /**
@@ -18,6 +22,7 @@ export class CarManager {
      * @param {Object} gridMetrics - 網格度量資訊
      */
     createCars(gridMetrics) {
+        this.gridMetrics = gridMetrics;
         const loader = new GLTFLoader();
 
         // 計算軌距（兩條軌道中心之間的距離）
@@ -26,6 +31,9 @@ export class CarManager {
             gridMetrics.boxWidth * 0.1,
         );
         this.trackGauge = laneWidth * 0.6;
+        this.stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
+        this.stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
+        this.trackY = gridMetrics.pillarTopY + gridMetrics.boxHeight * 0.7;
 
         // 只創建兩台車：一台橫向，一台縱向
         const carConfigs = [
@@ -33,25 +41,23 @@ export class CarManager {
                 name: "橫向車",
                 rotation: 0,           // 朝右（X軸正方向）
                 pathType: "horizontal",
-                startOffset: 0
+                startOffset: 0,
+                startCoord: { x: 0, z: 0 }
             },
             {
                 name: "縱向車",
                 rotation: Math.PI / 2, // 朝下（Z軸正方向）
                 pathType: "vertical",
-                startOffset: 0.25      // 錯開位置
+                startOffset: 0.25,     // 錯開位置
+                startCoord: { x: gridMetrics.width - 1, z: 0 }
             }
         ];
 
         loader.load(
             "/car.glb",
             (gltf) => {
-                // 車子應該在軌道高度（抬高一點）
-                const trackY = gridMetrics.pillarTopY + gridMetrics.boxHeight * 0.7;
-
                 // 車子大小：兩格（兩個箱子的寬度加上間距）
-                const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
-                const carScale = stepX * 1.1;
+                const carScale = this.stepX * 1.1;
 
                 carConfigs.forEach((config) => {
                     const carClone = gltf.scene.clone();
@@ -63,26 +69,24 @@ export class CarManager {
                     carClone.castShadow = true;
                     carClone.receiveShadow = true;
 
-                    // 生成路徑（車子在軌道上移動）
-                    const path = this.generateCarPath(
-                        gridMetrics,
-                        trackY,
-                        config.pathType
-                    );
-                    const startIndex = Math.floor(path.length * config.startOffset);
+                    const startCoord = config.startCoord || { x: 0, z: 0 };
+                    const startPoint = this.gridToWorld(startCoord.x, startCoord.z);
+                    const path = [{ position: startPoint, coord: startCoord }];
 
-                    // 設置初始位置
-                    carClone.position.copy(path[startIndex]);
+                    carClone.position.copy(startPoint);
 
                     this.scene.add(carClone);
 
                     // 儲存車子資訊
                     this.cars.push({
+                        id: `car-${this.cars.length + 1}`,
                         model: carClone,
-                        path: path,
-                        pathIndex: startIndex,
+                        path,
+                        pathIndex: 0,
                         name: config.name,
-                        fixedRotation: config.rotation
+                        fixedRotation: config.rotation,
+                        currentCoord: { ...startCoord },
+                        targetCoord: null,
                     });
 
                     console.log(`✓ ${config.name} 已加載，旋轉: ${(config.rotation * 180 / Math.PI).toFixed(0)}°`);
@@ -91,7 +95,7 @@ export class CarManager {
                 console.log(`✓ 總共加載了 ${this.cars.length} 台車`);
                 console.log("  - 軌距:", this.trackGauge.toFixed(3));
                 console.log("  - 車子縮放:", carScale.toFixed(3));
-                console.log("  - 軌道高度:", trackY.toFixed(3));
+                console.log("  - 軌道高度:", this.trackY.toFixed(3));
             },
             (progress) => {
                 console.log(
@@ -105,110 +109,117 @@ export class CarManager {
         );
     }
 
-    /**
-     * 生成車子的環形路徑
-     * @param {Object} gridMetrics - 網格度量資訊
-     * @param {number} trackY - 軌道高度
-     * @param {string} pathType - 路徑類型 ("horizontal" 或 "vertical")
-     * @returns {Array} 路徑點陣列
-     */
-    generateCarPath(gridMetrics, trackY, pathType) {
-        const path = [];
-        const stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
-        const stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
+    gridToWorld(xIndex, zIndex) {
+        if (!this.gridMetrics) return new THREE.Vector3();
+        const worldX = this.gridMetrics.startX + xIndex * this.stepX - this.gridMetrics.modelCenter.x;
+        const worldZ = this.gridMetrics.startZ + zIndex * this.stepZ - this.gridMetrics.modelCenter.z;
+        return new THREE.Vector3(worldX, this.trackY, worldZ);
+    }
 
-        const leftRingX = gridMetrics.startX - stepX / 2 - gridMetrics.modelCenter.x;
-        const rightRingX = gridMetrics.startX + (gridMetrics.width - 1) * stepX + stepX / 2 - gridMetrics.modelCenter.x;
-        const topRingZ = gridMetrics.startZ - stepZ / 2 - gridMetrics.modelCenter.z;
-        const bottomRingZ = gridMetrics.startZ + (gridMetrics.depth - 1) * stepZ + stepZ / 2 - gridMetrics.modelCenter.z;
+    getCarOptions() {
+        return this.cars.map(car => ({
+            id: car.id,
+            label: car.name,
+        }));
+    }
 
-        const segments = 50;
+    getDestinationOptions() {
+        if (!this.gridMetrics) return [];
+        const options = [];
+        for (let z = 0; z < this.gridMetrics.depth; z++) {
+            for (let x = 0; x < this.gridMetrics.width; x++) {
+                const id = `${x}-${z}`;
+                options.push({
+                    id,
+                    label: `X${x + 1} - Z${z + 1}`,
+                });
+            }
+        }
+        return options;
+    }
 
-        if (pathType === "horizontal") {
-            // 橫向路徑：頂部 -> 右側 -> 底部 -> 左側
-            // 頂部邊（從左到右）
-            for (let i = 0; i <= segments; i++) {
-                const t = i / segments;
-                path.push(new THREE.Vector3(
-                    leftRingX + (rightRingX - leftRingX) * t,
-                    trackY,
-                    topRingZ
-                ));
+    setDestination(carId, destinationId) {
+        const car = this.cars.find(c => c.id === carId);
+        if (!car || !this.gridMetrics) return { success: false, message: "找不到車子" };
+
+        const [xStr, zStr] = destinationId.split("-");
+        const targetCoord = { x: Number(xStr), z: Number(zStr) };
+
+        if (Number.isNaN(targetCoord.x) || Number.isNaN(targetCoord.z)) {
+            return { success: false, message: "目的地格式不正確" };
+        }
+
+        if (
+            targetCoord.x < 0 ||
+            targetCoord.x >= this.gridMetrics.width ||
+            targetCoord.z < 0 ||
+            targetCoord.z >= this.gridMetrics.depth
+        ) {
+            return { success: false, message: "目的地超出架位範圍" };
+        }
+
+        const pathCoords = this.findGridPath(car.currentCoord, targetCoord);
+        if (!pathCoords) {
+            return { success: false, message: "無法找到路徑" };
+        }
+
+        const newPath = pathCoords.map(coord => ({
+            coord,
+            position: this.gridToWorld(coord.x, coord.z),
+        }));
+
+        car.path = newPath;
+        car.pathIndex = 0;
+        car.targetCoord = targetCoord;
+
+        return { success: true, message: `${car.name} 路線已更新` };
+    }
+
+    findGridPath(startCoord, targetCoord) {
+        const queue = [startCoord];
+        const visited = new Set([`${startCoord.x}-${startCoord.z}`]);
+        const parentMap = new Map();
+
+        const directions = [
+            { x: 1, z: 0 },
+            { x: -1, z: 0 },
+            { x: 0, z: 1 },
+            { x: 0, z: -1 },
+        ];
+
+        while (queue.length > 0) {
+            const current = queue.shift();
+            if (current.x === targetCoord.x && current.z === targetCoord.z) {
+                const path = [];
+                let nodeKey = `${current.x}-${current.z}`;
+                while (nodeKey) {
+                    const [cx, cz] = nodeKey.split("-").map(Number);
+                    path.unshift({ x: cx, z: cz });
+                    nodeKey = parentMap.get(nodeKey);
+                }
+                return path;
             }
 
-            // 右側邊（從上到下）
-            for (let i = 1; i <= segments; i++) {
-                const t = i / segments;
-                path.push(new THREE.Vector3(
-                    rightRingX,
-                    trackY,
-                    topRingZ + (bottomRingZ - topRingZ) * t
-                ));
-            }
+            for (const dir of directions) {
+                const nx = current.x + dir.x;
+                const nz = current.z + dir.z;
+                const key = `${nx}-${nz}`;
 
-            // 底部邊（從右到左）
-            for (let i = 1; i <= segments; i++) {
-                const t = i / segments;
-                path.push(new THREE.Vector3(
-                    rightRingX - (rightRingX - leftRingX) * t,
-                    trackY,
-                    bottomRingZ
-                ));
-            }
+                if (
+                    nx < 0 || nx >= this.gridMetrics.width ||
+                    nz < 0 || nz >= this.gridMetrics.depth ||
+                    visited.has(key)
+                ) {
+                    continue;
+                }
 
-            // 左側邊（從下到上）
-            for (let i = 1; i < segments; i++) {
-                const t = i / segments;
-                path.push(new THREE.Vector3(
-                    leftRingX,
-                    trackY,
-                    bottomRingZ - (bottomRingZ - topRingZ) * t
-                ));
-            }
-        } else {
-            // 縱向路徑：右側 -> 底部 -> 左側 -> 頂部
-            // 右側邊（從上到下）
-            for (let i = 0; i <= segments; i++) {
-                const t = i / segments;
-                path.push(new THREE.Vector3(
-                    rightRingX,
-                    trackY,
-                    topRingZ + (bottomRingZ - topRingZ) * t
-                ));
-            }
-
-            // 底部邊（從右到左）
-            for (let i = 1; i <= segments; i++) {
-                const t = i / segments;
-                path.push(new THREE.Vector3(
-                    rightRingX - (rightRingX - leftRingX) * t,
-                    trackY,
-                    bottomRingZ
-                ));
-            }
-
-            // 左側邊（從下到上）
-            for (let i = 1; i <= segments; i++) {
-                const t = i / segments;
-                path.push(new THREE.Vector3(
-                    leftRingX,
-                    trackY,
-                    bottomRingZ - (bottomRingZ - topRingZ) * t
-                ));
-            }
-
-            // 頂部邊（從左到右）
-            for (let i = 1; i < segments; i++) {
-                const t = i / segments;
-                path.push(new THREE.Vector3(
-                    leftRingX + (rightRingX - leftRingX) * t,
-                    trackY,
-                    topRingZ
-                ));
+                visited.add(key);
+                parentMap.set(key, `${current.x}-${current.z}`);
+                queue.push({ x: nx, z: nz });
             }
         }
 
-        return path;
+        return null;
     }
 
     /**
@@ -219,7 +230,9 @@ export class CarManager {
         if (this.cars.length === 0) return;
 
         this.cars.forEach(carData => {
-            const { model, path, fixedRotation } = carData;
+            const { model, path } = carData;
+
+            if (path.length === 0) return;
 
             // 計算移動距離
             const moveDistance = this.carSpeed * delta;
@@ -227,27 +240,36 @@ export class CarManager {
 
             while (remainingDistance > 0 && path.length > 0) {
                 const currentPos = model.position;
-                const targetPos = path[carData.pathIndex];
-
+                const targetPoint = path[carData.pathIndex];
                 const direction = new THREE.Vector3()
-                    .subVectors(targetPos, currentPos);
+                    .subVectors(targetPoint.position, currentPos);
                 const distanceToTarget = direction.length();
 
                 if (distanceToTarget <= remainingDistance) {
-                    // 到達當前目標點，移動到下一個
-                    model.position.copy(targetPos);
+                    model.position.copy(targetPoint.position);
+                    carData.currentCoord = { ...targetPoint.coord };
                     remainingDistance -= distanceToTarget;
-                    carData.pathIndex = (carData.pathIndex + 1) % path.length;
+
+                    if (carData.pathIndex < path.length - 1) {
+                        const nextPoint = path[carData.pathIndex + 1];
+                        const nextDir = new THREE.Vector3()
+                            .subVectors(nextPoint.position, targetPoint.position)
+                            .normalize();
+                        model.rotation.y = Math.atan2(nextDir.x, nextDir.z);
+                    }
+
+                    if (carData.pathIndex < path.length - 1) {
+                        carData.pathIndex += 1;
+                    } else {
+                        remainingDistance = 0;
+                    }
                 } else {
-                    // 向目標點移動
                     direction.normalize();
                     model.position.addScaledVector(direction, remainingDistance);
+                    model.rotation.y = Math.atan2(direction.x, direction.z);
                     remainingDistance = 0;
                 }
             }
-
-            // 保持固定旋轉（不隨移動方向改變）
-            model.rotation.y = fixedRotation;
         });
     }
 
