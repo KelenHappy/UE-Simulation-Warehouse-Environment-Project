@@ -65,6 +65,7 @@ export class CarManager {
 
                 carConfigs.forEach((config) => {
                     const carClone = gltf.scene.clone();
+                    this.rotateModules(carClone);
                     carClone.scale.set(carScale, carScale, carScale);
 
                     // 設置固定旋轉：所有車輛面向卸貨區
@@ -342,5 +343,17 @@ export class CarManager {
      */
     getTrackGauge() {
         return this.trackGauge;
+    }
+
+    rotateModules(carModel) {
+        const flipMatrix = new THREE.Matrix4().makeRotationY(Math.PI);
+        carModel.traverse((child) => {
+            if (!child.isMesh || !child.geometry) return;
+
+            child.geometry = child.geometry.clone();
+            child.geometry.applyMatrix4(flipMatrix);
+            child.geometry.computeBoundingBox();
+            child.geometry.computeBoundingSphere();
+        });
     }
 }
