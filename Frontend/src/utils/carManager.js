@@ -71,8 +71,9 @@ export class CarManager {
                     carClone.receiveShadow = true;
 
                     const startCoord = config.startCoord || { x: 0, z: 0 };
-                    const startPoint = this.gridToWorld(startCoord.x, startCoord.z);
-                    const path = [{ position: startPoint, coord: startCoord }];
+                    const heading = this.rotationToDirection(config.rotation);
+                    const startPoint = this.getCargoAlignedPosition(startCoord, heading);
+                    const path = [{ position: startPoint, coord: startCoord, direction: heading.clone() }];
 
                     carClone.position.copy(startPoint);
 
@@ -86,6 +87,7 @@ export class CarManager {
                         pathIndex: 0,
                         name: config.name,
                         fixedRotation: config.rotation,
+                        heading,
                         currentCoord: { ...startCoord },
                         targetCoord: null,
                     });
@@ -119,6 +121,28 @@ export class CarManager {
         const worldX = this.gridMetrics.startX + xIndex * this.stepX - this.gridMetrics.modelCenter.x;
         const worldZ = this.gridMetrics.startZ + zIndex * this.stepZ - this.gridMetrics.modelCenter.z;
         return new THREE.Vector3(worldX, this.trackY, worldZ);
+    }
+
+    rotationToDirection(rotation) {
+        const direction = new THREE.Vector3(Math.sin(rotation), 0, Math.cos(rotation));
+        if (Math.abs(direction.x) > Math.abs(direction.z)) {
+            return new THREE.Vector3(Math.sign(direction.x), 0, 0);
+        }
+        return new THREE.Vector3(0, 0, Math.sign(direction.z) || 1);
+    }
+
+    getAxisStep(direction) {
+        if (Math.abs(direction.x) > Math.abs(direction.z)) {
+            return this.stepX;
+        }
+        return this.stepZ;
+    }
+
+    getCargoAlignedPosition(coord, direction) {
+        const dir = direction.clone();
+        const axisStep = this.getAxisStep(dir);
+        const offset = dir.lengthSq() > 0 ? dir.clone().normalize().multiplyScalar(-axisStep / 2) : new THREE.Vector3();
+        return this.gridToWorld(coord.x, coord.z).add(offset);
     }
 
     getCarOptions() {
@@ -168,14 +192,22 @@ export class CarManager {
             return { success: false, message: "無法找到路徑" };
         }
 
-        const newPath = pathCoords.map(coord => ({
-            coord,
-            position: this.gridToWorld(coord.x, coord.z),
-        }));
+        const currentHeading = car.heading?.clone() || new THREE.Vector3(0, 0, 1);
+        const newPath = pathCoords.map((coord, index) => {
+            const direction = this.getPointDirection(pathCoords, index, currentHeading);
+            return {
+                coord,
+                direction,
+                position: this.getCargoAlignedPosition(coord, direction),
+            };
+        });
 
         car.path = newPath;
         car.pathIndex = 0;
         car.targetCoord = targetCoord;
+        if (newPath.length > 0) {
+            car.heading = newPath[0].direction.clone().normalize();
+        }
 
         return { success: true, message: `${car.name} 路線已更新` };
     }
@@ -227,6 +259,31 @@ export class CarManager {
         return null;
     }
 
+    getPointDirection(pathCoords, index, fallbackDirection) {
+        const current = pathCoords[index];
+        let direction = new THREE.Vector3();
+
+        if (pathCoords.length === 1) {
+            return fallbackDirection.clone();
+        }
+
+        if (index < pathCoords.length - 1) {
+            const next = pathCoords[index + 1];
+            direction.set(next.x - current.x, 0, next.z - current.z);
+        } else if (index > 0) {
+            const prev = pathCoords[index - 1];
+            direction.set(current.x - prev.x, 0, current.z - prev.z);
+        } else {
+            direction.copy(fallbackDirection);
+        }
+
+        if (direction.lengthSq() === 0) {
+            direction.copy(fallbackDirection);
+        }
+
+        return direction;
+    }
+
     /**
      * 更新所有車子的位置
      * @param {number} delta - 時間增量
@@ -257,10 +314,11 @@ export class CarManager {
 
                     if (carData.pathIndex < path.length - 1) {
                         const nextPoint = path[carData.pathIndex + 1];
-                        const nextDir = new THREE.Vector3()
-                            .subVectors(nextPoint.position, targetPoint.position)
+                        const nextDir = (nextPoint.direction || new THREE.Vector3())
+                            .clone()
                             .normalize();
                         model.rotation.y = Math.atan2(nextDir.x, nextDir.z);
+                        carData.heading = nextDir.clone();
                     }
 
                     if (carData.pathIndex < path.length - 1) {
@@ -272,6 +330,7 @@ export class CarManager {
                     direction.normalize();
                     model.position.addScaledVector(direction, remainingDistance);
                     model.rotation.y = Math.atan2(direction.x, direction.z);
+                    carData.heading = direction.clone();
                     remainingDistance = 0;
                 }
             }
