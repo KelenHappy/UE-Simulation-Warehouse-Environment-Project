@@ -57,10 +57,15 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                     createTrackSystem({ scene, baseModel, trackPieces, gridMetrics: metrics, unloadBays });
                     player = createPlayer(scene, metrics.modelSize);
                     if (carManager) {
-                        carManager.createCars(metrics);
-                        carOptions.value = carManager.getCarOptions();
-                        destinationOptions.value = carManager.getDestinationOptions();
-                        routeStatus.value = "車輛已載入，請選擇目的地";
+                        carManager.createCars(metrics)
+                            .then(() => {
+                                carOptions.value = carManager.getCarOptions();
+                                destinationOptions.value = carManager.getDestinationOptions();
+                                routeStatus.value = "車輛已載入，請選擇目的地";
+                            })
+                            .catch(() => {
+                                routeStatus.value = "車輛載入失敗";
+                            });
                     }
                     saveBoxData(boxes, metrics.modelSize);
                 }

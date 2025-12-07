@@ -53,9 +53,10 @@ export class CarManager {
             }
         ];
 
-        loader.load(
-            "/car.glb",
-            (gltf) => {
+        return new Promise((resolve, reject) => {
+            loader.load(
+                "/car.glb",
+                (gltf) => {
                 // 車子大小：兩格（兩個箱子的寬度加上間距）
                 const carScale = this.stepX * 1.1;
 
@@ -92,21 +93,25 @@ export class CarManager {
                     console.log(`✓ ${config.name} 已加載，旋轉: ${(config.rotation * 180 / Math.PI).toFixed(0)}°`);
                 });
 
-                console.log(`✓ 總共加載了 ${this.cars.length} 台車`);
-                console.log("  - 軌距:", this.trackGauge.toFixed(3));
-                console.log("  - 車子縮放:", carScale.toFixed(3));
-                console.log("  - 軌道高度:", this.trackY.toFixed(3));
-            },
-            (progress) => {
-                console.log(
-                    "車子加載進度:",
-                    (progress.loaded / progress.total) * 100 + "%",
-                );
-            },
-            (error) => {
-                console.error("❌ 加載 car.glb 時出錯:", error);
-            }
-        );
+                    console.log(`✓ 總共加載了 ${this.cars.length} 台車`);
+                    console.log("  - 軌距:", this.trackGauge.toFixed(3));
+                    console.log("  - 車子縮放:", carScale.toFixed(3));
+                    console.log("  - 軌道高度:", this.trackY.toFixed(3));
+
+                    resolve(this.getCarOptions());
+                },
+                (progress) => {
+                    console.log(
+                        "車子加載進度:",
+                        (progress.loaded / progress.total) * 100 + "%",
+                    );
+                },
+                (error) => {
+                    console.error("❌ 加載 car.glb 時出錯:", error);
+                    reject(error);
+                }
+            );
+        });
     }
 
     gridToWorld(xIndex, zIndex) {
