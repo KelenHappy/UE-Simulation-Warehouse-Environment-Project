@@ -15,6 +15,11 @@ export class CarManager {
         this.trackY = 0;
         this.stepX = 0;
         this.stepZ = 0;
+        this.unloadFacingDirection = new THREE.Vector3(0, 0, -1);
+        this.unloadFacingRotation = Math.atan2(
+            this.unloadFacingDirection.x,
+            this.unloadFacingDirection.z,
+        );
     }
 
     /**
@@ -39,14 +44,12 @@ export class CarManager {
         const carConfigs = [
             {
                 name: "橫向車",
-                rotation: 0,           // 朝右（X軸正方向）
                 pathType: "horizontal",
                 startOffset: 0,
                 startCoord: { x: 0, z: 0 }
             },
             {
                 name: "縱向車",
-                rotation: Math.PI / 2, // 朝下（Z軸正方向）
                 pathType: "vertical",
                 startOffset: 0.25,     // 錯開位置
                 startCoord: { x: gridMetrics.width - 1, z: 0 }
@@ -64,14 +67,14 @@ export class CarManager {
                     const carClone = gltf.scene.clone();
                     carClone.scale.set(carScale, carScale, carScale);
 
-                    // 設置固定旋轉
-                    carClone.rotation.y = config.rotation;
+                    // 設置固定旋轉：所有車輛面向卸貨區
+                    carClone.rotation.y = this.unloadFacingRotation;
 
                     carClone.castShadow = true;
                     carClone.receiveShadow = true;
 
                     const startCoord = config.startCoord || { x: 0, z: 0 };
-                    const heading = this.rotationToDirection(config.rotation);
+                    const heading = this.unloadFacingDirection.clone();
                     const startPoint = this.getCargoAlignedPosition(startCoord, heading);
                     const path = [{ position: startPoint, coord: startCoord, direction: heading.clone() }];
 
@@ -86,13 +89,13 @@ export class CarManager {
                         path,
                         pathIndex: 0,
                         name: config.name,
-                        fixedRotation: config.rotation,
+                        fixedRotation: this.unloadFacingRotation,
                         heading,
                         currentCoord: { ...startCoord },
                         targetCoord: null,
                     });
 
-                    console.log(`✓ ${config.name} 已加載，旋轉: ${(config.rotation * 180 / Math.PI).toFixed(0)}°`);
+                    console.log(`✓ ${config.name} 已加載，旋轉: ${(this.unloadFacingRotation * 180 / Math.PI).toFixed(0)}°`);
                 });
 
                     console.log(`✓ 總共加載了 ${this.cars.length} 台車`);
@@ -192,21 +195,18 @@ export class CarManager {
             return { success: false, message: "無法找到路徑" };
         }
 
-        const currentHeading = car.heading?.clone() || new THREE.Vector3(0, 0, 1);
-        const newPath = pathCoords.map((coord, index) => {
-            const direction = this.getPointDirection(pathCoords, index, currentHeading);
-            return {
-                coord,
-                direction,
-                position: this.getCargoAlignedPosition(coord, direction),
-            };
-        });
+        const carHeading = car.heading?.clone() || this.unloadFacingDirection.clone();
+        const newPath = pathCoords.map((coord) => ({
+            coord,
+            direction: carHeading.clone(),
+            position: this.getCargoAlignedPosition(coord, carHeading),
+        }));
 
         car.path = newPath;
         car.pathIndex = 0;
         car.targetCoord = targetCoord;
         if (newPath.length > 0) {
-            car.heading = newPath[0].direction.clone().normalize();
+            car.heading = this.unloadFacingDirection.clone();
         }
 
         return { success: true, message: `${car.name} 路線已更新` };
@@ -259,31 +259,6 @@ export class CarManager {
         return null;
     }
 
-    getPointDirection(pathCoords, index, fallbackDirection) {
-        const current = pathCoords[index];
-        let direction = new THREE.Vector3();
-
-        if (pathCoords.length === 1) {
-            return fallbackDirection.clone();
-        }
-
-        if (index < pathCoords.length - 1) {
-            const next = pathCoords[index + 1];
-            direction.set(next.x - current.x, 0, next.z - current.z);
-        } else if (index > 0) {
-            const prev = pathCoords[index - 1];
-            direction.set(current.x - prev.x, 0, current.z - prev.z);
-        } else {
-            direction.copy(fallbackDirection);
-        }
-
-        if (direction.lengthSq() === 0) {
-            direction.copy(fallbackDirection);
-        }
-
-        return direction;
-    }
-
     /**
      * 更新所有車子的位置
      * @param {number} delta - 時間增量
@@ -293,6 +268,9 @@ export class CarManager {
 
         this.cars.forEach(carData => {
             const { model, path } = carData;
+
+            // 車輛保持面向卸貨區，不隨路徑轉向
+            model.rotation.y = this.unloadFacingRotation;
 
             if (path.length === 0) return;
 
@@ -313,15 +291,6 @@ export class CarManager {
                     remainingDistance -= distanceToTarget;
 
                     if (carData.pathIndex < path.length - 1) {
-                        const nextPoint = path[carData.pathIndex + 1];
-                        const nextDir = (nextPoint.direction || new THREE.Vector3())
-                            .clone()
-                            .normalize();
-                        model.rotation.y = Math.atan2(nextDir.x, nextDir.z);
-                        carData.heading = nextDir.clone();
-                    }
-
-                    if (carData.pathIndex < path.length - 1) {
                         carData.pathIndex += 1;
                     } else {
                         remainingDistance = 0;
@@ -329,8 +298,6 @@ export class CarManager {
                 } else {
                     direction.normalize();
                     model.position.addScaledVector(direction, remainingDistance);
-                    model.rotation.y = Math.atan2(direction.x, direction.z);
-                    carData.heading = direction.clone();
                     remainingDistance = 0;
                 }
             }
