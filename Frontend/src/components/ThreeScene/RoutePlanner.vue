@@ -14,11 +14,11 @@
             </select>
         </div>
         <div class="field">
-            <label for="destination-select">前往位置</label>
-            <select id="destination-select" v-model="localSelectedDestination">
-                <option value="" disabled>請選擇目標點</option>
+            <label for="destination-x">前往位置 X</label>
+            <select id="destination-x" v-model="localSelectedX">
+                <option value="" disabled>請選擇 X</option>
                 <option
-                    v-for="point in destinationOptions"
+                    v-for="point in destinationXOptions"
                     :key="point.id"
                     :value="point.id"
                 >
@@ -26,9 +26,30 @@
                 </option>
             </select>
         </div>
-        <button class="assign-btn" @click="$emit('assign-route')">
-            派送
-        </button>
+        <div class="field">
+            <label for="destination-y">前往位置 Y</label>
+            <select id="destination-y" v-model="localSelectedY">
+                <option value="" disabled>請選擇 Y</option>
+                <option
+                    v-for="point in destinationYOptions"
+                    :key="point.id"
+                    :value="point.id"
+                >
+                    {{ point.label }}
+                </option>
+            </select>
+        </div>
+        <div class="actions">
+            <button class="assign-btn" @click="$emit('assign-route')">
+                派送
+            </button>
+            <button class="pickup-btn" @click="$emit('pick-cargo')">
+                拿取貨物
+            </button>
+            <button class="drop-btn" @click="$emit('drop-cargo')">
+                放下貨物
+            </button>
+        </div>
     </div>
 </template>
 
@@ -40,7 +61,11 @@ const props = defineProps({
         type: Array,
         required: true,
     },
-    destinationOptions: {
+    destinationXOptions: {
+        type: Array,
+        required: true,
+    },
+    destinationYOptions: {
         type: Array,
         required: true,
     },
@@ -58,10 +83,12 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['update:selectedCar', 'update:selectedDestination', 'assign-route']);
+const emit = defineEmits(['update:selectedCar', 'update:selectedDestination', 'assign-route', 'pick-cargo', 'drop-cargo']);
 
 const localSelectedCar = ref(props.selectedCar);
 const localSelectedDestination = ref(props.selectedDestination);
+const localSelectedX = ref('');
+const localSelectedY = ref('');
 
 watch(() => props.selectedCar, (val) => {
     localSelectedCar.value = val;
@@ -69,10 +96,36 @@ watch(() => props.selectedCar, (val) => {
 
 watch(() => props.selectedDestination, (val) => {
     localSelectedDestination.value = val;
+    const [x, y] = val?.split('-') || [];
+    localSelectedX.value = x || '';
+    localSelectedY.value = y || '';
+});
+
+watch(() => props.destinationXOptions, (options) => {
+    if (!localSelectedX.value && options?.length) {
+        localSelectedX.value = options[0].id;
+    }
+});
+
+watch(() => props.destinationYOptions, (options) => {
+    if (!localSelectedY.value && options?.length) {
+        localSelectedY.value = options[0].id;
+    }
 });
 
 watch(localSelectedCar, (val) => emit('update:selectedCar', val));
 watch(localSelectedDestination, (val) => emit('update:selectedDestination', val));
+
+watch([localSelectedX, localSelectedY], ([x, y]) => {
+    if (x && y) {
+        const combined = `${x}-${y}`;
+        localSelectedDestination.value = combined;
+        emit('update:selectedDestination', combined);
+    } else {
+        localSelectedDestination.value = '';
+        emit('update:selectedDestination', '');
+    }
+});
 </script>
 
 <style scoped>
@@ -127,7 +180,15 @@ select:focus {
     box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.3);
 }
 
-.assign-btn {
+.actions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.assign-btn,
+.pickup-btn,
+.drop-btn {
     background: linear-gradient(135deg, #22d3ee, #6366f1);
     border: none;
     color: white;
@@ -138,12 +199,25 @@ select:focus {
     transition: transform 0.1s ease, box-shadow 0.2s ease;
 }
 
-.assign-btn:hover {
+.pickup-btn {
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+}
+
+.drop-btn {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    grid-column: span 2;
+}
+
+.assign-btn:hover,
+.pickup-btn:hover,
+.drop-btn:hover {
     transform: translateY(-1px);
     box-shadow: 0 10px 20px rgba(99, 102, 241, 0.35);
 }
 
-.assign-btn:active {
+.assign-btn:active,
+.pickup-btn:active,
+.drop-btn:active {
     transform: translateY(0);
 }
 </style>

@@ -20,6 +20,9 @@ export class CarManager {
             this.unloadFacingDirection.x,
             this.unloadFacingDirection.z,
         );
+        this.cargoBoxes = [];
+        this.cargoMountOffset = 0;
+        this.cargoFrontOffset = 0;
     }
 
     /**
@@ -39,17 +42,19 @@ export class CarManager {
         this.stepX = gridMetrics.boxWidth + gridMetrics.spacingX;
         this.stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
         this.trackY = gridMetrics.pillarTopY + gridMetrics.boxHeight * 0.7;
+        this.cargoMountOffset = gridMetrics.boxHeight * 0.8;
+        this.cargoFrontOffset = (gridMetrics.boxDepth + gridMetrics.spacingZ) * 0.3;
 
         // 只創建兩台車：一台橫向，一台縱向
         const carConfigs = [
             {
-                name: "橫向車",
+                name: "車輛1",
                 pathType: "horizontal",
                 startOffset: 0,
                 startCoord: { x: 0, z: 0 }
             },
             {
-                name: "縱向車",
+                name: "車輛2",
                 pathType: "vertical",
                 startOffset: 0.25,     // 錯開位置
                 startCoord: { x: gridMetrics.width - 1, z: 0 }
@@ -81,6 +86,25 @@ export class CarManager {
 
                     carClone.position.copy(startPoint);
 
+                    carClone.updateMatrixWorld(true);
+                    const carBox = new THREE.Box3().setFromObject(carClone);
+                    const carSize = carBox.getSize(new THREE.Vector3());
+                    const carCenterWorld = carBox.getCenter(new THREE.Vector3());
+                    const baseY = carBox.min.y + carSize.y * 0.45;
+                    const forwardDirWorld = this.unloadFacingDirection.clone().normalize();
+                    const headCenterWorld = new THREE.Vector3(
+                        carCenterWorld.x,
+                        baseY,
+                        carCenterWorld.z,
+                    ).add(forwardDirWorld.clone().multiplyScalar(carSize.z * 0.25));
+                    const tailCenterWorld = new THREE.Vector3(
+                        carCenterWorld.x,
+                        baseY,
+                        carCenterWorld.z,
+                    ).add(forwardDirWorld.clone().multiplyScalar(-carSize.z * 0.25));
+                    const mountOffsetFront = carClone.worldToLocal(headCenterWorld.clone());
+                    const mountOffsetBack = carClone.worldToLocal(tailCenterWorld.clone());
+
                     this.scene.add(carClone);
 
                     // 儲存車子資訊
@@ -94,6 +118,11 @@ export class CarManager {
                         heading,
                         currentCoord: { ...startCoord },
                         targetCoord: null,
+                        cargo: null,
+                        mountOffsets: {
+                            front: mountOffsetFront,
+                            back: mountOffsetBack,
+                        },
                     });
 
                     console.log(`✓ ${config.name} 已加載，旋轉: ${(this.unloadFacingRotation * 180 / Math.PI).toFixed(0)}°`);
@@ -149,6 +178,26 @@ export class CarManager {
         return this.gridToWorld(coord.x, coord.z).add(offset);
     }
 
+    getShelfWorldPosition({ x, y, z }) {
+        if (!this.gridMetrics) return new THREE.Vector3();
+        const xPos = this.gridMetrics.startX + x * (this.gridMetrics.boxWidth + this.gridMetrics.spacingX) - this.gridMetrics.modelCenter.x;
+        const zPos = this.gridMetrics.startZ + z * (this.gridMetrics.boxDepth + this.gridMetrics.spacingZ) - this.gridMetrics.modelCenter.z;
+        const yPos = this.gridMetrics.startY + y * (this.gridMetrics.boxHeight + this.gridMetrics.spacingY) - this.gridMetrics.modelCenter.y;
+        return new THREE.Vector3(xPos, yPos, zPos);
+    }
+
+    applyWorldScale(object, targetWorldScale, parent) {
+        const parentWorldScale = new THREE.Vector3(1, 1, 1);
+        if (parent) {
+            parent.getWorldScale(parentWorldScale);
+        }
+        object.scale.set(
+            targetWorldScale.x / parentWorldScale.x,
+            targetWorldScale.y / parentWorldScale.y,
+            targetWorldScale.z / parentWorldScale.z,
+        );
+    }
+
     getCarOptions() {
         return this.cars.map(car => ({
             id: car.id,
@@ -169,6 +218,10 @@ export class CarManager {
             }
         }
         return options;
+    }
+
+    setCargoBoxes(boxes = []) {
+        this.cargoBoxes = boxes;
     }
 
     setDestination(carId, destinationId) {
@@ -260,6 +313,152 @@ export class CarManager {
         return null;
     }
 
+    isCarReadyForAction(carData) {
+        if (!carData) return false;
+        if (carData.path.length === 0) return true;
+        if (carData.pathIndex === carData.path.length - 1) {
+            const target = carData.path[carData.path.length - 1];
+            return carData.model.position.distanceTo(target.position) < 0.05;
+        }
+        return false;
+    }
+
+    getShelfBoxesAtCoord(coord) {
+        if (!this.cargoBoxes || this.cargoBoxes.length === 0) return [];
+        return this.cargoBoxes.filter((box) => {
+            const gridCoord = box.userData?.gridCoord;
+            return (
+                gridCoord &&
+                gridCoord.x === coord.x &&
+                gridCoord.z === coord.z &&
+                !box.userData?.attachedToCarId &&
+                !box.userData?.isPicked
+            );
+        });
+    }
+
+    findTopCargoAtCoord(coord) {
+        const candidates = this.getShelfBoxesAtCoord(coord);
+        if (candidates.length === 0) return null;
+
+        candidates.sort((a, b) => {
+            const ay = a.userData?.gridCoord?.y ?? 0;
+            const by = b.userData?.gridCoord?.y ?? 0;
+            return by - ay;
+        });
+
+        return candidates[0];
+    }
+
+    attachCargoToCar(carData, cargoBox, mountPosition = "front") {
+        const mountOffset = carData.mountOffsets?.[mountPosition]?.clone()
+            || carData.mountOffsets?.front?.clone()
+            || new THREE.Vector3(0, this.cargoMountOffset || 0, 0);
+
+        if (!cargoBox.userData.originalScale) {
+            cargoBox.userData.originalScale = cargoBox.scale.clone();
+        }
+        if (!cargoBox.userData.originalParent) {
+            cargoBox.userData.originalParent = cargoBox.parent;
+        }
+
+        cargoBox.userData.isPicked = true;
+        cargoBox.userData.attachedToCarId = carData.id;
+        cargoBox.userData.originalParent = cargoBox.parent;
+
+        carData.model.attach(cargoBox);
+        cargoBox.position.copy(mountOffset);
+        cargoBox.rotation.set(0, 0, 0);
+        if (cargoBox.userData.originalWorldScale) {
+            this.applyWorldScale(cargoBox, cargoBox.userData.originalWorldScale, carData.model);
+        } else {
+            cargoBox.scale.copy(cargoBox.userData.originalScale);
+        }
+        cargoBox.updateMatrixWorld(true);
+
+        carData.cargo = cargoBox;
+    }
+
+    pickUpCargo(carId) {
+        const car = this.cars.find(c => c.id === carId);
+        if (!car) return { success: false, message: "找不到車輛" };
+        if (!this.gridMetrics) return { success: false, message: "網格資訊未初始化" };
+
+        if (!this.isCarReadyForAction(car)) {
+            return { success: false, message: "請先讓車輛抵達目標位置" };
+        }
+
+        if (car.cargo) {
+            return { success: false, message: `${car.name} 已載有貨物` };
+        }
+
+        const cargoBox = this.findTopCargoAtCoord(car.currentCoord);
+        if (!cargoBox) {
+            return { success: false, message: "該位置沒有可拿取的貨物" };
+        }
+
+        this.attachCargoToCar(car, cargoBox);
+        return { success: true, message: `${car.name} 已拿取 ${cargoBox.userData.productName}` };
+    }
+
+    getNextShelfLevel(coord) {
+        const stacks = this.getShelfBoxesAtCoord(coord);
+        const highestLevel = stacks.reduce((max, box) => {
+            const level = box.userData?.gridCoord?.y ?? -1;
+            return Math.max(max, level);
+        }, -1);
+        return highestLevel + 1;
+    }
+
+    dropCargo(carId) {
+        const car = this.cars.find(c => c.id === carId);
+        if (!car) return { success: false, message: "找不到車輛" };
+        if (!this.gridMetrics) return { success: false, message: "網格資訊未初始化" };
+
+        if (!car.cargo) {
+            return { success: false, message: `${car.name} 沒有貨物可放下` };
+        }
+
+        if (!this.isCarReadyForAction(car)) {
+            return { success: false, message: "請先讓車輛抵達目標位置" };
+        }
+
+        const nextLevel = this.getNextShelfLevel(car.currentCoord);
+        if (nextLevel >= this.gridMetrics.height + 1) {
+            return { success: false, message: "貨物堆疊已達架子高度上限" };
+        }
+
+        const cargoBox = car.cargo;
+        const worldPosition = this.getShelfWorldPosition({
+            x: car.currentCoord.x,
+            y: nextLevel,
+            z: car.currentCoord.z,
+        });
+
+        const parent = cargoBox.userData.originalParent || this.scene;
+        const localPosition = worldPosition.clone();
+        parent.worldToLocal(localPosition);
+        parent.attach(cargoBox);
+
+        cargoBox.position.copy(localPosition);
+        cargoBox.rotation.set(0, 0, 0);
+        if (cargoBox.userData.originalWorldScale) {
+            this.applyWorldScale(cargoBox, cargoBox.userData.originalWorldScale, parent);
+        } else if (cargoBox.userData.originalScale) {
+            cargoBox.scale.copy(cargoBox.userData.originalScale);
+        }
+        cargoBox.updateMatrixWorld(true);
+
+        cargoBox.userData.gridCoord = { x: car.currentCoord.x, y: nextLevel, z: car.currentCoord.z };
+        cargoBox.userData.isPicked = false;
+        cargoBox.userData.attachedToCarId = null;
+        cargoBox.userData.originalParent = parent;
+
+        car.cargo = null;
+
+        return { success: true, message: `${car.name} 已放下 ${cargoBox.userData.productName}` };
+    }
+
     /**
      * 更新所有車子的位置
      * @param {number} delta - 時間增量
@@ -301,6 +500,17 @@ export class CarManager {
                     model.position.addScaledVector(direction, remainingDistance);
                     remainingDistance = 0;
                 }
+            }
+
+            const reachedEnd = path.length > 0 &&
+                carData.pathIndex === path.length - 1 &&
+                model.position.distanceTo(path[path.length - 1].position) < 0.001;
+
+            if (reachedEnd) {
+                carData.path = [];
+                carData.pathIndex = 0;
+                carData.targetCoord = null;
+                carData.heading = this.unloadFacingDirection.clone();
             }
         });
     }
