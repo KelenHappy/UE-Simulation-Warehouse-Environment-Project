@@ -26,9 +26,14 @@
                 </option>
             </select>
         </div>
-        <button class="assign-btn" @click="$emit('assign-route')">
-            派送
-        </button>
+        <div class="actions">
+            <button class="assign-btn" @click="$emit('assign-route')">
+                派送
+            </button>
+            <button class="pickup-btn" @click="$emit('pick-cargo')">
+                拿取貨物
+            </button>
+        </div>
     </div>
 </template>
 
@@ -58,7 +63,7 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['update:selectedCar', 'update:selectedDestination', 'assign-route']);
+const emit = defineEmits(['update:selectedCar', 'update:selectedDestination', 'assign-route', 'pick-cargo']);
 
 const localSelectedCar = ref(props.selectedCar);
 const localSelectedDestination = ref(props.selectedDestination);
@@ -127,7 +132,14 @@ select:focus {
     box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.3);
 }
 
-.assign-btn {
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.assign-btn,
+.pickup-btn {
+    flex: 1;
     background: linear-gradient(135deg, #22d3ee, #6366f1);
     border: none;
     color: white;
@@ -138,12 +150,18 @@ select:focus {
     transition: transform 0.1s ease, box-shadow 0.2s ease;
 }
 
-.assign-btn:hover {
+.pickup-btn {
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+}
+
+.assign-btn:hover,
+.pickup-btn:hover {
     transform: translateY(-1px);
     box-shadow: 0 10px 20px rgba(99, 102, 241, 0.35);
 }
 
-.assign-btn:active {
+.assign-btn:active,
+.pickup-btn:active {
     transform: translateY(0);
 }
 </style>

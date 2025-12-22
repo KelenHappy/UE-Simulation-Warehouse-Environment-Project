@@ -58,6 +58,8 @@ export function createBoxGrid({ scene, baseModel, boxes, unloadAreaCells, onComp
                 clonedModel.userData = {
                     boxId,
                     productName: `商品 ${boxId}`,
+                    gridCoord: { x, y, z },
+                    isPicked: false,
                 };
                 
                 scene.add(clonedModel);

@@ -10,6 +10,7 @@
             v-model:selected-destination="selectedDestination"
             :status="routeStatus"
             @assign-route="handleAssignRoute"
+            @pick-cargo="handlePickCargo"
         />
         <SpeedControl v-model="moveSpeed" />
         <BoxTooltip
@@ -41,6 +42,7 @@ const {
     destinationOptions,
     routeStatus,
     setCarDestination,
+    pickUpCargo,
 } = useThreeScene({
     container,
     moveSpeed,
@@ -66,6 +68,14 @@ const handleAssignRoute = () => {
         return;
     }
     setCarDestination(selectedCar.value, selectedDestination.value);
+};
+
+const handlePickCargo = () => {
+    if (!selectedCar.value) {
+        routeStatus.value = "請先選擇車輛";
+        return;
+    }
+    pickUpCargo(selectedCar.value);
 };
 
 onMounted(() => {

@@ -57,6 +57,7 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                     createTrackSystem({ scene, baseModel, trackPieces, gridMetrics: metrics, unloadBays });
                     player = createPlayer(scene, metrics.modelSize);
                     if (carManager) {
+                        carManager.setCargoBoxes(boxes);
                         carManager.createCars(metrics)
                             .then(() => {
                                 carOptions.value = carManager.getCarOptions();
@@ -76,6 +77,13 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
     function setCarDestination(carId, destinationId) {
         if (!carManager) return false;
         const result = carManager.setDestination(carId, destinationId);
+        routeStatus.value = result.message;
+        return result.success;
+    }
+
+    function pickUpCargo(carId) {
+        if (!carManager) return false;
+        const result = carManager.pickUpCargo(carId);
         routeStatus.value = result.message;
         return result.success;
     }
@@ -268,5 +276,6 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         destinationOptions,
         routeStatus,
         setCarDestination,
+        pickUpCargo,
     };
 }
