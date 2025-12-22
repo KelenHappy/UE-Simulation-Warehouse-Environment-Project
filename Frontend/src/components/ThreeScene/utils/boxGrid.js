@@ -61,6 +61,11 @@ export function createBoxGrid({ scene, baseModel, boxes, unloadAreaCells, onComp
                     gridCoord: { x, y, z },
                     isPicked: false,
                     originalScale: clonedModel.scale.clone(),
+                    originalWorldScale: (() => {
+                        const scale = new THREE.Vector3();
+                        clonedModel.getWorldScale(scale);
+                        return scale;
+                    })(),
                     originalParent: scene,
                 };
                 

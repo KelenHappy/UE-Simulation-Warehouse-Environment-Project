@@ -42,6 +42,7 @@ export class CarManager {
         this.stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
         this.trackY = gridMetrics.pillarTopY + gridMetrics.boxHeight * 0.7;
         this.cargoMountOffset = gridMetrics.boxHeight * 0.8;
+        this.cargoFrontOffset = (gridMetrics.boxDepth + gridMetrics.spacingZ) * 0.4;
 
         // 只創建兩台車：一台橫向，一台縱向
         const carConfigs = [
@@ -159,6 +160,18 @@ export class CarManager {
         const zPos = this.gridMetrics.startZ + z * (this.gridMetrics.boxDepth + this.gridMetrics.spacingZ) - this.gridMetrics.modelCenter.z;
         const yPos = this.gridMetrics.startY + y * (this.gridMetrics.boxHeight + this.gridMetrics.spacingY) - this.gridMetrics.modelCenter.y;
         return new THREE.Vector3(xPos, yPos, zPos);
+    }
+
+    applyWorldScale(object, targetWorldScale, parent) {
+        const parentWorldScale = new THREE.Vector3(1, 1, 1);
+        if (parent) {
+            parent.getWorldScale(parentWorldScale);
+        }
+        object.scale.set(
+            targetWorldScale.x / parentWorldScale.x,
+            targetWorldScale.y / parentWorldScale.y,
+            targetWorldScale.z / parentWorldScale.z,
+        );
     }
 
     getCarOptions() {
@@ -314,11 +327,9 @@ export class CarManager {
     }
 
     attachCargoToCar(carData, cargoBox) {
-        const mountOffset = new THREE.Vector3(
-            0,
-            this.cargoMountOffset || (this.gridMetrics?.boxHeight ?? 1),
-            0,
-        );
+        const mountOffset = new THREE.Vector3(0, this.cargoMountOffset || (this.gridMetrics?.boxHeight ?? 1), 0);
+        const forwardOffset = this.unloadFacingDirection.clone().setLength(this.cargoFrontOffset || 0);
+        mountOffset.add(forwardOffset);
 
         if (!cargoBox.userData.originalScale) {
             cargoBox.userData.originalScale = cargoBox.scale.clone();
@@ -334,7 +345,11 @@ export class CarManager {
         carData.model.attach(cargoBox);
         cargoBox.position.copy(mountOffset);
         cargoBox.rotation.set(0, 0, 0);
-        cargoBox.scale.copy(cargoBox.userData.originalScale);
+        if (cargoBox.userData.originalWorldScale) {
+            this.applyWorldScale(cargoBox, cargoBox.userData.originalWorldScale, carData.model);
+        } else {
+            cargoBox.scale.copy(cargoBox.userData.originalScale);
+        }
         cargoBox.updateMatrixWorld(true);
 
         carData.cargo = cargoBox;
@@ -403,7 +418,9 @@ export class CarManager {
 
         cargoBox.position.copy(localPosition);
         cargoBox.rotation.set(0, 0, 0);
-        if (cargoBox.userData.originalScale) {
+        if (cargoBox.userData.originalWorldScale) {
+            this.applyWorldScale(cargoBox, cargoBox.userData.originalWorldScale, parent);
+        } else if (cargoBox.userData.originalScale) {
             cargoBox.scale.copy(cargoBox.userData.originalScale);
         }
         cargoBox.updateMatrixWorld(true);
