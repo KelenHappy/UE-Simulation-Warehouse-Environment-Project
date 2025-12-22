@@ -21,7 +21,8 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
     let animationId = null;
     let eventHandlers = {};
     const carOptions = ref([]);
-    const destinationOptions = ref([]);
+    const destinationXOptions = ref([]);
+    const destinationYOptions = ref([]);
     const routeStatus = ref("選擇車輛與目的地後派送");
 
     const unloadBays = [
@@ -61,7 +62,14 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                         carManager.createCars(metrics)
                             .then(() => {
                                 carOptions.value = carManager.getCarOptions();
-                                destinationOptions.value = carManager.getDestinationOptions();
+                                destinationXOptions.value = Array.from({ length: metrics.width }, (_, i) => ({
+                                    id: `${i}`,
+                                    label: `X${i + 1}`,
+                                }));
+                                destinationYOptions.value = Array.from({ length: metrics.depth }, (_, i) => ({
+                                    id: `${i}`,
+                                    label: `Y${i + 1}`,
+                                }));
                                 routeStatus.value = "車輛已載入，請選擇目的地";
                             })
                             .catch(() => {
@@ -280,7 +288,8 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         init,
         cleanup,
         carOptions,
-        destinationOptions,
+        destinationXOptions,
+        destinationYOptions,
         routeStatus,
         setCarDestination,
         pickUpCargo,

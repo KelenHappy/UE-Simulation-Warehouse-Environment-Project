@@ -320,6 +320,13 @@ export class CarManager {
             0,
         );
 
+        if (!cargoBox.userData.originalScale) {
+            cargoBox.userData.originalScale = cargoBox.scale.clone();
+        }
+        if (!cargoBox.userData.originalParent) {
+            cargoBox.userData.originalParent = cargoBox.parent;
+        }
+
         cargoBox.userData.isPicked = true;
         cargoBox.userData.attachedToCarId = carData.id;
         cargoBox.userData.originalParent = cargoBox.parent;
@@ -327,6 +334,7 @@ export class CarManager {
         carData.model.attach(cargoBox);
         cargoBox.position.copy(mountOffset);
         cargoBox.rotation.set(0, 0, 0);
+        cargoBox.scale.copy(cargoBox.userData.originalScale);
         cargoBox.updateMatrixWorld(true);
 
         carData.cargo = cargoBox;
@@ -377,7 +385,7 @@ export class CarManager {
         }
 
         const nextLevel = this.getNextShelfLevel(car.currentCoord);
-        if (nextLevel >= this.gridMetrics.height) {
+        if (nextLevel >= this.gridMetrics.height + 1) {
             return { success: false, message: "貨物堆疊已達架子高度上限" };
         }
 
@@ -391,16 +399,19 @@ export class CarManager {
         const parent = cargoBox.userData.originalParent || this.scene;
         const localPosition = worldPosition.clone();
         parent.worldToLocal(localPosition);
-        parent.add(cargoBox);
+        parent.attach(cargoBox);
 
         cargoBox.position.copy(localPosition);
         cargoBox.rotation.set(0, 0, 0);
+        if (cargoBox.userData.originalScale) {
+            cargoBox.scale.copy(cargoBox.userData.originalScale);
+        }
         cargoBox.updateMatrixWorld(true);
 
         cargoBox.userData.gridCoord = { x: car.currentCoord.x, y: nextLevel, z: car.currentCoord.z };
         cargoBox.userData.isPicked = false;
         cargoBox.userData.attachedToCarId = null;
-        cargoBox.userData.originalParent = null;
+        cargoBox.userData.originalParent = parent;
 
         car.cargo = null;
 
