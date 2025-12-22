@@ -39,6 +39,13 @@
                 </option>
             </select>
         </div>
+        <div class="field">
+            <label for="mount-select">攜帶位置</label>
+            <select id="mount-select" v-model="localMountPosition">
+                <option value="front">車頭</option>
+                <option value="back">車尾</option>
+            </select>
+        </div>
         <div class="actions">
             <button class="assign-btn" @click="$emit('assign-route')">
                 派送
@@ -81,14 +88,19 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    mountPosition: {
+        type: String,
+        default: 'front',
+    },
 });
 
-const emit = defineEmits(['update:selectedCar', 'update:selectedDestination', 'assign-route', 'pick-cargo', 'drop-cargo']);
+const emit = defineEmits(['update:selectedCar', 'update:selectedDestination', 'update:mountPosition', 'assign-route', 'pick-cargo', 'drop-cargo']);
 
 const localSelectedCar = ref(props.selectedCar);
 const localSelectedDestination = ref(props.selectedDestination);
 const localSelectedX = ref('');
 const localSelectedY = ref('');
+const localMountPosition = ref(props.mountPosition ?? 'front');
 
 watch(() => props.selectedCar, (val) => {
     localSelectedCar.value = val;
@@ -99,6 +111,10 @@ watch(() => props.selectedDestination, (val) => {
     const [x, y] = val?.split('-') || [];
     localSelectedX.value = x || '';
     localSelectedY.value = y || '';
+});
+
+watch(() => props.mountPosition, (val) => {
+    localMountPosition.value = val || 'front';
 });
 
 watch(() => props.destinationXOptions, (options) => {
@@ -115,6 +131,7 @@ watch(() => props.destinationYOptions, (options) => {
 
 watch(localSelectedCar, (val) => emit('update:selectedCar', val));
 watch(localSelectedDestination, (val) => emit('update:selectedDestination', val));
+watch(localMountPosition, (val) => emit('update:mountPosition', val));
 
 watch([localSelectedX, localSelectedY], ([x, y]) => {
     if (x && y) {

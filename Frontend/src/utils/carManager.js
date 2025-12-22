@@ -90,11 +90,20 @@ export class CarManager {
                     const carBox = new THREE.Box3().setFromObject(carClone);
                     const carSize = carBox.getSize(new THREE.Vector3());
                     const carCenterWorld = carBox.getCenter(new THREE.Vector3());
+                    const baseY = carBox.min.y + carSize.y * 0.45;
                     const forwardDirWorld = this.unloadFacingDirection.clone().normalize();
-                    const mountPointWorld = carCenterWorld.clone().add(
-                        forwardDirWorld.clone().multiplyScalar(carSize.z * 0.25)
-                    );
-                    const mountOffset = carClone.worldToLocal(mountPointWorld.clone());
+                    const headCenterWorld = new THREE.Vector3(
+                        carCenterWorld.x,
+                        baseY,
+                        carCenterWorld.z,
+                    ).add(forwardDirWorld.clone().multiplyScalar(carSize.z * 0.25));
+                    const tailCenterWorld = new THREE.Vector3(
+                        carCenterWorld.x,
+                        baseY,
+                        carCenterWorld.z,
+                    ).add(forwardDirWorld.clone().multiplyScalar(-carSize.z * 0.25));
+                    const mountOffsetFront = carClone.worldToLocal(headCenterWorld.clone());
+                    const mountOffsetBack = carClone.worldToLocal(tailCenterWorld.clone());
 
                     this.scene.add(carClone);
 
@@ -110,7 +119,10 @@ export class CarManager {
                         currentCoord: { ...startCoord },
                         targetCoord: null,
                         cargo: null,
-                        mountOffset,
+                        mountOffsets: {
+                            front: mountOffsetFront,
+                            back: mountOffsetBack,
+                        },
                     });
 
                     console.log(`✓ ${config.name} 已加載，旋轉: ${(this.unloadFacingRotation * 180 / Math.PI).toFixed(0)}°`);
@@ -338,12 +350,10 @@ export class CarManager {
         return candidates[0];
     }
 
-    attachCargoToCar(carData, cargoBox) {
-        const mountOffset = carData.mountOffset?.clone() || new THREE.Vector3(
-            0,
-            this.cargoMountOffset || 0,
-            0,
-        );
+    attachCargoToCar(carData, cargoBox, mountPosition = "front") {
+        const mountOffset = carData.mountOffsets?.[mountPosition]?.clone()
+            || carData.mountOffsets?.front?.clone()
+            || new THREE.Vector3(0, this.cargoMountOffset || 0, 0);
 
         if (!cargoBox.userData.originalScale) {
             cargoBox.userData.originalScale = cargoBox.scale.clone();
@@ -369,7 +379,7 @@ export class CarManager {
         carData.cargo = cargoBox;
     }
 
-    pickUpCargo(carId) {
+    pickUpCargo(carId, mountPosition = "front") {
         const car = this.cars.find(c => c.id === carId);
         if (!car) return { success: false, message: "找不到車輛" };
         if (!this.gridMetrics) return { success: false, message: "網格資訊未初始化" };
@@ -387,7 +397,7 @@ export class CarManager {
             return { success: false, message: "該位置沒有可拿取的貨物" };
         }
 
-        this.attachCargoToCar(car, cargoBox);
+        this.attachCargoToCar(car, cargoBox, mountPosition);
         return { success: true, message: `${car.name} 已拿取 ${cargoBox.userData.productName}` };
     }
 
