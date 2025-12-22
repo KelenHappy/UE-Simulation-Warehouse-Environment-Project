@@ -153,6 +153,14 @@ export class CarManager {
         return this.gridToWorld(coord.x, coord.z).add(offset);
     }
 
+    getShelfWorldPosition({ x, y, z }) {
+        if (!this.gridMetrics) return new THREE.Vector3();
+        const xPos = this.gridMetrics.startX + x * (this.gridMetrics.boxWidth + this.gridMetrics.spacingX) - this.gridMetrics.modelCenter.x;
+        const zPos = this.gridMetrics.startZ + z * (this.gridMetrics.boxDepth + this.gridMetrics.spacingZ) - this.gridMetrics.modelCenter.z;
+        const yPos = this.gridMetrics.startY + y * (this.gridMetrics.boxHeight + this.gridMetrics.spacingY) - this.gridMetrics.modelCenter.y;
+        return new THREE.Vector3(xPos, yPos, zPos);
+    }
+
     getCarOptions() {
         return this.cars.map(car => ({
             id: car.id,
@@ -268,7 +276,7 @@ export class CarManager {
         return null;
     }
 
-    isCarReadyForPickup(carData) {
+    isCarReadyForAction(carData) {
         if (!carData) return false;
         if (carData.path.length === 0) return true;
         if (carData.pathIndex === carData.path.length - 1) {
@@ -278,19 +286,22 @@ export class CarManager {
         return false;
     }
 
-    findTopCargoAtCoord(coord) {
-        if (!this.cargoBoxes || this.cargoBoxes.length === 0) return null;
-
-        const candidates = this.cargoBoxes.filter((box) => {
+    getShelfBoxesAtCoord(coord) {
+        if (!this.cargoBoxes || this.cargoBoxes.length === 0) return [];
+        return this.cargoBoxes.filter((box) => {
             const gridCoord = box.userData?.gridCoord;
             return (
-                !box.userData?.isPicked &&
                 gridCoord &&
                 gridCoord.x === coord.x &&
-                gridCoord.z === coord.z
+                gridCoord.z === coord.z &&
+                !box.userData?.attachedToCarId &&
+                !box.userData?.isPicked
             );
         });
+    }
 
+    findTopCargoAtCoord(coord) {
+        const candidates = this.getShelfBoxesAtCoord(coord);
         if (candidates.length === 0) return null;
 
         candidates.sort((a, b) => {
@@ -326,7 +337,7 @@ export class CarManager {
         if (!car) return { success: false, message: "找不到車輛" };
         if (!this.gridMetrics) return { success: false, message: "網格資訊未初始化" };
 
-        if (!this.isCarReadyForPickup(car)) {
+        if (!this.isCarReadyForAction(car)) {
             return { success: false, message: "請先讓車輛抵達目標位置" };
         }
 
@@ -341,6 +352,59 @@ export class CarManager {
 
         this.attachCargoToCar(car, cargoBox);
         return { success: true, message: `${car.name} 已拿取 ${cargoBox.userData.productName}` };
+    }
+
+    getNextShelfLevel(coord) {
+        const stacks = this.getShelfBoxesAtCoord(coord);
+        const highestLevel = stacks.reduce((max, box) => {
+            const level = box.userData?.gridCoord?.y ?? -1;
+            return Math.max(max, level);
+        }, -1);
+        return highestLevel + 1;
+    }
+
+    dropCargo(carId) {
+        const car = this.cars.find(c => c.id === carId);
+        if (!car) return { success: false, message: "找不到車輛" };
+        if (!this.gridMetrics) return { success: false, message: "網格資訊未初始化" };
+
+        if (!car.cargo) {
+            return { success: false, message: `${car.name} 沒有貨物可放下` };
+        }
+
+        if (!this.isCarReadyForAction(car)) {
+            return { success: false, message: "請先讓車輛抵達目標位置" };
+        }
+
+        const nextLevel = this.getNextShelfLevel(car.currentCoord);
+        if (nextLevel >= this.gridMetrics.height) {
+            return { success: false, message: "貨物堆疊已達架子高度上限" };
+        }
+
+        const cargoBox = car.cargo;
+        const worldPosition = this.getShelfWorldPosition({
+            x: car.currentCoord.x,
+            y: nextLevel,
+            z: car.currentCoord.z,
+        });
+
+        const parent = cargoBox.userData.originalParent || this.scene;
+        const localPosition = worldPosition.clone();
+        parent.worldToLocal(localPosition);
+        parent.add(cargoBox);
+
+        cargoBox.position.copy(localPosition);
+        cargoBox.rotation.set(0, 0, 0);
+        cargoBox.updateMatrixWorld(true);
+
+        cargoBox.userData.gridCoord = { x: car.currentCoord.x, y: nextLevel, z: car.currentCoord.z };
+        cargoBox.userData.isPicked = false;
+        cargoBox.userData.attachedToCarId = null;
+        cargoBox.userData.originalParent = null;
+
+        car.cargo = null;
+
+        return { success: true, message: `${car.name} 已放下 ${cargoBox.userData.productName}` };
     }
 
     /**

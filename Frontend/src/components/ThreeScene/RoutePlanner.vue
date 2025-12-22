@@ -33,6 +33,9 @@
             <button class="pickup-btn" @click="$emit('pick-cargo')">
                 拿取貨物
             </button>
+            <button class="drop-btn" @click="$emit('drop-cargo')">
+                放下貨物
+            </button>
         </div>
     </div>
 </template>
@@ -63,7 +66,7 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['update:selectedCar', 'update:selectedDestination', 'assign-route', 'pick-cargo']);
+const emit = defineEmits(['update:selectedCar', 'update:selectedDestination', 'assign-route', 'pick-cargo', 'drop-cargo']);
 
 const localSelectedCar = ref(props.selectedCar);
 const localSelectedDestination = ref(props.selectedDestination);
@@ -133,13 +136,14 @@ select:focus {
 }
 
 .actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
     gap: 8px;
 }
 
 .assign-btn,
-.pickup-btn {
-    flex: 1;
+.pickup-btn,
+.drop-btn {
     background: linear-gradient(135deg, #22d3ee, #6366f1);
     border: none;
     color: white;
@@ -154,14 +158,21 @@ select:focus {
     background: linear-gradient(135deg, #f59e0b, #f97316);
 }
 
+.drop-btn {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    grid-column: span 2;
+}
+
 .assign-btn:hover,
-.pickup-btn:hover {
+.pickup-btn:hover,
+.drop-btn:hover {
     transform: translateY(-1px);
     box-shadow: 0 10px 20px rgba(99, 102, 241, 0.35);
 }
 
 .assign-btn:active,
-.pickup-btn:active {
+.pickup-btn:active,
+.drop-btn:active {
     transform: translateY(0);
 }
 </style>

@@ -88,6 +88,13 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         return result.success;
     }
 
+    function dropCargo(carId) {
+        if (!carManager) return false;
+        const result = carManager.dropCargo(carId);
+        routeStatus.value = result.message;
+        return result.success;
+    }
+
     function processModel(originalScene) {
         originalScene.updateMatrixWorld(true);
         const originalBox = new THREE.Box3().setFromObject(originalScene);
@@ -277,5 +284,6 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         routeStatus,
         setCarDestination,
         pickUpCargo,
+        dropCargo,
     };
 }
