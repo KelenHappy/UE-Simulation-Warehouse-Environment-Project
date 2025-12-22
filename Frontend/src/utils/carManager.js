@@ -22,6 +22,7 @@ export class CarManager {
         );
         this.cargoBoxes = [];
         this.cargoMountOffset = 0;
+        this.cargoFrontOffset = 0;
     }
 
     /**
@@ -42,7 +43,7 @@ export class CarManager {
         this.stepZ = gridMetrics.boxDepth + gridMetrics.spacingZ;
         this.trackY = gridMetrics.pillarTopY + gridMetrics.boxHeight * 0.7;
         this.cargoMountOffset = gridMetrics.boxHeight * 0.8;
-        this.cargoFrontOffset = (gridMetrics.boxDepth + gridMetrics.spacingZ) * 0.4;
+        this.cargoFrontOffset = (gridMetrics.boxDepth + gridMetrics.spacingZ) * 0.5;
 
         // 只創建兩台車：一台橫向，一台縱向
         const carConfigs = [
@@ -327,7 +328,7 @@ export class CarManager {
     }
 
     attachCargoToCar(carData, cargoBox) {
-        const mountOffset = new THREE.Vector3(0, this.cargoMountOffset || (this.gridMetrics?.boxHeight ?? 1), 0);
+        const mountOffset = new THREE.Vector3(0, 0, 0);
         const forwardOffset = this.unloadFacingDirection.clone().setLength(this.cargoFrontOffset || 0);
         mountOffset.add(forwardOffset);
 
