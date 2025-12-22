@@ -86,15 +86,15 @@ export class CarManager {
 
                     carClone.position.copy(startPoint);
 
+                    carClone.updateMatrixWorld(true);
                     const carBox = new THREE.Box3().setFromObject(carClone);
                     const carSize = carBox.getSize(new THREE.Vector3());
-                    const mountOffset = new THREE.Vector3(
-                        0,
-                        carSize.y * 0.5,
-                        0,
-                    ).add(
-                        this.unloadFacingDirection.clone().setLength(carSize.z * 0.25),
+                    const carCenterWorld = carBox.getCenter(new THREE.Vector3());
+                    const forwardDirWorld = this.unloadFacingDirection.clone().normalize();
+                    const mountPointWorld = carCenterWorld.clone().add(
+                        forwardDirWorld.clone().multiplyScalar(carSize.z * 0.25)
                     );
+                    const mountOffset = carClone.worldToLocal(mountPointWorld.clone());
 
                     this.scene.add(carClone);
 
