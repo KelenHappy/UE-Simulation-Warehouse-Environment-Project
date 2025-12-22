@@ -88,8 +88,13 @@ export class CarManager {
 
                     const carBox = new THREE.Box3().setFromObject(carClone);
                     const carSize = carBox.getSize(new THREE.Vector3());
-                    this.cargoMountOffset = carSize.y * 0.5;
-                    this.cargoFrontOffset = carSize.z * 0.25;
+                    const mountOffset = new THREE.Vector3(
+                        0,
+                        carSize.y * 0.5,
+                        0,
+                    ).add(
+                        this.unloadFacingDirection.clone().setLength(carSize.z * 0.25),
+                    );
 
                     this.scene.add(carClone);
 
@@ -105,6 +110,7 @@ export class CarManager {
                         currentCoord: { ...startCoord },
                         targetCoord: null,
                         cargo: null,
+                        mountOffset,
                     });
 
                     console.log(`✓ ${config.name} 已加載，旋轉: ${(this.unloadFacingRotation * 180 / Math.PI).toFixed(0)}°`);
@@ -333,13 +339,11 @@ export class CarManager {
     }
 
     attachCargoToCar(carData, cargoBox) {
-        const mountOffset = new THREE.Vector3(
+        const mountOffset = carData.mountOffset?.clone() || new THREE.Vector3(
             0,
             this.cargoMountOffset || 0,
             0,
         );
-        const forwardOffset = this.unloadFacingDirection.clone().setLength(this.cargoFrontOffset || 0);
-        mountOffset.add(forwardOffset);
 
         if (!cargoBox.userData.originalScale) {
             cargoBox.userData.originalScale = cargoBox.scale.clone();
