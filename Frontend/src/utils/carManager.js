@@ -379,7 +379,7 @@ export class CarManager {
         carData.cargo = cargoBox;
     }
 
-    pickUpCargo(carId, mountPosition = "front") {
+    pickUpCargo(carId) {
         const car = this.cars.find(c => c.id === carId);
         if (!car) return { success: false, message: "找不到車輛" };
         if (!this.gridMetrics) return { success: false, message: "網格資訊未初始化" };
@@ -397,7 +397,7 @@ export class CarManager {
             return { success: false, message: "該位置沒有可拿取的貨物" };
         }
 
-        this.attachCargoToCar(car, cargoBox, mountPosition);
+        this.attachCargoToCar(car, cargoBox);
         return { success: true, message: `${car.name} 已拿取 ${cargoBox.userData.productName}` };
     }
 

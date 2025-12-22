@@ -9,7 +9,6 @@
             :destination-y-options="destinationYOptions"
             v-model:selected-car="selectedCar"
             v-model:selected-destination="selectedDestination"
-            v-model:mount-position="selectedMountPosition"
             :status="routeStatus"
             @assign-route="handleAssignRoute"
             @pick-cargo="handlePickCargo"
@@ -40,7 +39,6 @@ const selectedCar = ref('');
 const selectedDestination = ref('');
 const selectedDestinationX = ref('');
 const selectedDestinationY = ref('');
-const selectedMountPosition = ref('front');
 const {
     init,
     cleanup,
@@ -97,7 +95,7 @@ const handlePickCargo = () => {
         routeStatus.value = "請先選擇車輛";
         return;
     }
-    pickUpCargo(selectedCar.value, selectedMountPosition.value);
+    pickUpCargo(selectedCar.value);
 };
 
 const handleDropCargo = () => {

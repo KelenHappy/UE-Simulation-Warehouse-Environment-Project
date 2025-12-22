@@ -89,9 +89,9 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         return result.success;
     }
 
-    function pickUpCargo(carId, mountPosition = "front") {
+    function pickUpCargo(carId) {
         if (!carManager) return false;
-        const result = carManager.pickUpCargo(carId, mountPosition);
+        const result = carManager.pickUpCargo(carId);
         routeStatus.value = result.message;
         return result.success;
     }
