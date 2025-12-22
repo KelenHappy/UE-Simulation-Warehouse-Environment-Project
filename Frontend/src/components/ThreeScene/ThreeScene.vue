@@ -5,11 +5,14 @@
         <RoutePlanner
             class="route-planner"
             :car-options="carOptions"
-            :destination-options="destinationOptions"
+            :destination-x-options="destinationXOptions"
+            :destination-y-options="destinationYOptions"
             v-model:selected-car="selectedCar"
             v-model:selected-destination="selectedDestination"
             :status="routeStatus"
             @assign-route="handleAssignRoute"
+            @pick-cargo="handlePickCargo"
+            @drop-cargo="handleDropCargo"
         />
         <SpeedControl v-model="moveSpeed" />
         <BoxTooltip
@@ -34,13 +37,18 @@ const hoveredBoxInfo = ref(null);
 const tooltipPosition = ref({ x: 0, y: 0 });
 const selectedCar = ref('');
 const selectedDestination = ref('');
+const selectedDestinationX = ref('');
+const selectedDestinationY = ref('');
 const {
     init,
     cleanup,
     carOptions,
-    destinationOptions,
+    destinationXOptions,
+    destinationYOptions,
     routeStatus,
     setCarDestination,
+    pickUpCargo,
+    dropCargo,
 } = useThreeScene({
     container,
     moveSpeed,
@@ -54,9 +62,23 @@ watch(carOptions, (options) => {
     }
 });
 
-watch(destinationOptions, (options) => {
-    if (!selectedDestination.value && options.length > 0) {
-        selectedDestination.value = options[0].id;
+watch(destinationXOptions, (options) => {
+    if (!selectedDestinationX.value && options.length > 0) {
+        selectedDestinationX.value = options[0].id;
+    }
+});
+
+watch(destinationYOptions, (options) => {
+    if (!selectedDestinationY.value && options.length > 0) {
+        selectedDestinationY.value = options[0].id;
+    }
+});
+
+watch([selectedDestinationX, selectedDestinationY], ([x, y]) => {
+    if (x && y) {
+        selectedDestination.value = `${x}-${y}`;
+    } else {
+        selectedDestination.value = '';
     }
 });
 
@@ -66,6 +88,22 @@ const handleAssignRoute = () => {
         return;
     }
     setCarDestination(selectedCar.value, selectedDestination.value);
+};
+
+const handlePickCargo = () => {
+    if (!selectedCar.value) {
+        routeStatus.value = "請先選擇車輛";
+        return;
+    }
+    pickUpCargo(selectedCar.value);
+};
+
+const handleDropCargo = () => {
+    if (!selectedCar.value) {
+        routeStatus.value = "請先選擇車輛";
+        return;
+    }
+    dropCargo(selectedCar.value);
 };
 
 onMounted(() => {

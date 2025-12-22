@@ -21,7 +21,8 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
     let animationId = null;
     let eventHandlers = {};
     const carOptions = ref([]);
-    const destinationOptions = ref([]);
+    const destinationXOptions = ref([]);
+    const destinationYOptions = ref([]);
     const routeStatus = ref("選擇車輛與目的地後派送");
 
     const unloadBays = [
@@ -57,10 +58,18 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                     createTrackSystem({ scene, baseModel, trackPieces, gridMetrics: metrics, unloadBays });
                     player = createPlayer(scene, metrics.modelSize);
                     if (carManager) {
+                        carManager.setCargoBoxes(boxes);
                         carManager.createCars(metrics)
                             .then(() => {
                                 carOptions.value = carManager.getCarOptions();
-                                destinationOptions.value = carManager.getDestinationOptions();
+                                destinationXOptions.value = Array.from({ length: metrics.width }, (_, i) => ({
+                                    id: `${i}`,
+                                    label: `X${i + 1}`,
+                                }));
+                                destinationYOptions.value = Array.from({ length: metrics.depth }, (_, i) => ({
+                                    id: `${i}`,
+                                    label: `Y${i + 1}`,
+                                }));
                                 routeStatus.value = "車輛已載入，請選擇目的地";
                             })
                             .catch(() => {
@@ -76,6 +85,20 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
     function setCarDestination(carId, destinationId) {
         if (!carManager) return false;
         const result = carManager.setDestination(carId, destinationId);
+        routeStatus.value = result.message;
+        return result.success;
+    }
+
+    function pickUpCargo(carId) {
+        if (!carManager) return false;
+        const result = carManager.pickUpCargo(carId);
+        routeStatus.value = result.message;
+        return result.success;
+    }
+
+    function dropCargo(carId) {
+        if (!carManager) return false;
+        const result = carManager.dropCargo(carId);
         routeStatus.value = result.message;
         return result.success;
     }
@@ -265,8 +288,11 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         init,
         cleanup,
         carOptions,
-        destinationOptions,
+        destinationXOptions,
+        destinationYOptions,
         routeStatus,
         setCarDestination,
+        pickUpCargo,
+        dropCargo,
     };
 }
