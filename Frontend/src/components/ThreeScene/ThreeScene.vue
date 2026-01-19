@@ -51,7 +51,7 @@ const {
     setCarDestination,
     pickUpCargo,
     dropCargo,
-    executeOrder,
+    executeOrders,
 } = useThreeScene({
     container,
     moveSpeed,
@@ -119,8 +119,8 @@ onUnmounted(() => {
     cleanup();
 });
 
-const startOrderExecution = async ({ order, items }) => {
-    return executeOrder({ order, items });
+const startOrderExecution = async (orderTasks) => {
+    return executeOrders(orderTasks);
 };
 
 defineExpose({

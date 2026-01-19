@@ -126,20 +126,79 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         });
     }
 
-    async function executeOrder({ order, items }) {
+    const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    async function executeOrder({ carId, order, items, shippingTarget }) {
+        if (!carId) {
+            return { success: false, message: "尚未分配車輛" };
+        }
+        if (!carManager) {
+            return { success: false, message: "車輛尚未準備完成" };
+        }
+
+        if (!Array.isArray(items) || items.length === 0) {
+            return { success: false, message: "訂單內容為空" };
+        }
+
+        for (const itemId of items) {
+            const cargoBox = boxes.find((box) => {
+                return box.userData?.boxId === itemId && !box.userData?.isPicked;
+            });
+
+            if (!cargoBox) {
+                executionStatus.value = `找不到商品 ${itemId}`;
+                continue;
+            }
+
+            const { x, z } = cargoBox.userData.gridCoord || {};
+            if (x === undefined || z === undefined) {
+                executionStatus.value = `商品 ${itemId} 的位置資訊缺失`;
+                continue;
+            }
+
+            const moveResult = setCarDestination(carId, `${x}-${z}`);
+            if (!moveResult) {
+                executionStatus.value = `無法前往商品 ${itemId}`;
+                continue;
+            }
+
+            await waitForCarReady(carId);
+            await pause(350);
+
+            const pickResult = pickUpCargo(carId);
+            if (!pickResult) {
+                executionStatus.value = `商品 ${itemId} 取貨失敗`;
+                continue;
+            }
+
+            await pause(350);
+
+            setCarDestination(carId, `${shippingTarget.coord.x}-${shippingTarget.coord.z}`);
+            await waitForCarReady(carId);
+            await pause(350);
+
+            const dropResult = dropCargo(carId);
+            if (!dropResult) {
+                executionStatus.value = `商品 ${itemId} 卸貨失敗`;
+                continue;
+            }
+
+            await pause(350);
+            executionStatus.value = `商品 ${itemId} 已送達 ${shippingTarget.label}`;
+        }
+
+        return { success: true, message: `訂單 ${order?.id ?? ""} 已完成`.trim() };
+    }
+
+    async function executeOrders(orderTasks = []) {
         if (isExecuting.value) {
             executionStatus.value = "目前已有訂單執行中，請稍候";
             return { success: false, message: executionStatus.value };
         }
 
-        const carId = getDefaultCarId();
-        if (!carManager || !carId) {
+        const carIds = carOptions.value.slice(0, 2).map((car) => car.id);
+        if (!carManager || carIds.length === 0) {
             executionStatus.value = "車輛尚未準備完成";
-            return { success: false, message: executionStatus.value };
-        }
-
-        if (!Array.isArray(items) || items.length === 0) {
-            executionStatus.value = "訂單內容為空";
             return { success: false, message: executionStatus.value };
         }
 
@@ -149,56 +208,37 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         ];
 
         isExecuting.value = true;
-        executionStatus.value = `開始執行訂單 ${order?.id ?? ""}`.trim();
+        executionStatus.value = "開始執行訂單";
 
         try {
-            let targetIndex = 0;
-            for (const itemId of items) {
-                const cargoBox = boxes.find((box) => {
-                    return box.userData?.boxId === itemId && !box.userData?.isPicked;
+            const tasks = orderTasks.slice(0, 2).map((task, index) => {
+                const shippingTarget = shippingTargets[index % shippingTargets.length];
+                const carId = carIds[index % carIds.length] || getDefaultCarId();
+                executionStatus.value = `分配 ${task.order?.id ?? ""} -> ${shippingTarget.label}`.trim();
+                return executeOrder({
+                    carId,
+                    order: task.order,
+                    items: task.items,
+                    shippingTarget,
                 });
+            });
 
-                if (!cargoBox) {
-                    executionStatus.value = `找不到商品 ${itemId}`;
-                    continue;
-                }
+            const results = await Promise.all(tasks);
+            const completedOrderIds = orderTasks
+                .slice(0, results.length)
+                .filter((_, index) => results[index]?.success)
+                .map((task) => task.order?.id)
+                .filter(Boolean);
 
-                const { x, z } = cargoBox.userData.gridCoord || {};
-                if (x === undefined || z === undefined) {
-                    executionStatus.value = `商品 ${itemId} 的位置資訊缺失`;
-                    continue;
-                }
-
-                const moveResult = setCarDestination(carId, `${x}-${z}`);
-                if (!moveResult) {
-                    executionStatus.value = `無法前往商品 ${itemId}`;
-                    continue;
-                }
-
-                await waitForCarReady(carId);
-
-                const pickResult = pickUpCargo(carId);
-                if (!pickResult) {
-                    executionStatus.value = `商品 ${itemId} 取貨失敗`;
-                    continue;
-                }
-
-                const shippingTarget = shippingTargets[targetIndex % shippingTargets.length];
-                targetIndex += 1;
-                setCarDestination(carId, `${shippingTarget.coord.x}-${shippingTarget.coord.z}`);
-                await waitForCarReady(carId);
-
-                const dropResult = dropCargo(carId);
-                if (!dropResult) {
-                    executionStatus.value = `商品 ${itemId} 卸貨失敗`;
-                    continue;
-                }
-
-                executionStatus.value = `商品 ${itemId} 已送達 ${shippingTarget.label}`;
+            if (completedOrderIds.length > 0) {
+                executionStatus.value = `訂單 ${completedOrderIds.join(", ")} 已完成`;
             }
 
-            executionStatus.value = `訂單 ${order?.id ?? ""} 已完成`.trim();
-            return { success: true, message: executionStatus.value };
+            return {
+                success: completedOrderIds.length > 0,
+                message: executionStatus.value,
+                completedOrderIds,
+            };
         } finally {
             isExecuting.value = false;
         }
@@ -397,6 +437,6 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         setCarDestination,
         pickUpCargo,
         dropCargo,
-        executeOrder,
+        executeOrders,
     };
 }

@@ -43,12 +43,16 @@ const parseOrderItems = (content) => {
 const handleStartExecution = async () => {
   if (!threeSceneRef.value || isExecuting.value || props.orders.length === 0) return
 
-  const order = props.orders[0]
-  const items = parseOrderItems(order.content)
-  const result = await threeSceneRef.value.startOrderExecution({ order, items })
+  const orderTasks = props.orders.slice(0, 2).map((order) => ({
+    order,
+    items: parseOrderItems(order.content)
+  }))
+  const result = await threeSceneRef.value.startOrderExecution(orderTasks)
 
-  if (result?.success) {
-    emit('order-complete', order.id)
+  if (result?.completedOrderIds?.length) {
+    result.completedOrderIds.forEach((orderId) => {
+      emit('order-complete', orderId)
+    })
   }
 }
 </script>
