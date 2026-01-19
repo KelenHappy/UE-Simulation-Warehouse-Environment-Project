@@ -171,19 +171,32 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         });
     }
 
-    function getStagingCoords() {
+    function getNearbyStagingCoords(centerCoord) {
         if (!gridMetricsCache) return [];
         const { width, depth } = gridMetricsCache;
-        return [
-            { x: 0, z: depth - 1 },
-            { x: width - 1, z: depth - 1 },
+        const offsets = [
+            { x: 1, z: 0 },
+            { x: -1, z: 0 },
+            { x: 0, z: 1 },
+            { x: 0, z: -1 },
+            { x: 1, z: 1 },
+            { x: 1, z: -1 },
+            { x: -1, z: 1 },
+            { x: -1, z: -1 },
         ];
+
+        return offsets
+            .map((offset) => ({
+                x: Math.max(0, Math.min(width - 1, centerCoord.x + offset.x)),
+                z: Math.max(0, Math.min(depth - 1, centerCoord.z + offset.z)),
+            }))
+            .filter((coord) => coord.x !== centerCoord.x || coord.z !== centerCoord.z);
     }
 
-    function getNextAvailableStagingCoord() {
-        const stagingCoords = getStagingCoords();
+    function getNextAvailableStagingCoord(centerCoord) {
+        const stagingCoords = getNearbyStagingCoords(centerCoord);
         if (!gridMetricsCache || stagingCoords.length === 0) {
-            return { x: 0, z: 0 };
+            return { x: centerCoord.x, z: centerCoord.z };
         }
 
         let bestCoord = stagingCoords[0];
@@ -198,15 +211,22 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         return bestCoord;
     }
 
-    async function clearBlockingCargo(carId, targetBox) {
+    async function clearBlockingCargo(carId, targetBox, orderItemIds, shippingTarget) {
         const targetCoord = targetBox.userData?.gridCoord;
         if (!targetCoord) return;
 
         let stack = getStackAtCoord(targetCoord);
         while (stack.length > 0 && stack[0].userData?.boxId !== targetBox.userData?.boxId) {
             const blockingBox = stack[0];
-            const stagingCoord = getNextAvailableStagingCoord();
-            await moveCargoBoxToCoord(carId, blockingBox, stagingCoord);
+            const blockingId = blockingBox.userData?.boxId;
+
+            if (orderItemIds?.has(blockingId)) {
+                await moveCargoBoxToCoord(carId, blockingBox, shippingTarget.coord);
+            } else {
+                const stagingCoord = getNextAvailableStagingCoord(targetCoord);
+                await moveCargoBoxToCoord(carId, blockingBox, stagingCoord);
+            }
+
             stack = getStackAtCoord(targetCoord);
         }
     }
@@ -223,6 +243,8 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
             return { success: false, message: "訂單內容為空" };
         }
 
+        const orderItemIds = new Set(items);
+
         for (const itemId of items) {
             const cargoBox = boxes.find((box) => {
                 return box.userData?.boxId === itemId && !box.userData?.isPicked;
@@ -238,7 +260,7 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                 continue;
             }
 
-            await clearBlockingCargo(carId, cargoBox);
+            await clearBlockingCargo(carId, cargoBox, orderItemIds, shippingTarget);
             const moveResult = await moveCargoBoxToCoord(carId, cargoBox, shippingTarget.coord);
             if (!moveResult) {
                 executionStatus.value = `商品 ${itemId} 卸貨失敗`;
