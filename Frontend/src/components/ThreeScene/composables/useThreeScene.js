@@ -12,6 +12,8 @@ import { setupHoverDetection } from '../utils/hoverDetection';
 
 export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPosition }) {
     let scene, camera, renderer, boxes = [], baseModel = null, trackPieces = [];
+    let currentModelSize = null;
+    let gridMetricsCache = null;
     let player = null, carManager = null;
     let yaw = 0, pitch = -0.3;
     const cameraOffset = new THREE.Vector3(0, 2, 6);
@@ -56,6 +58,8 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                 boxes,
                 unloadAreaCells,
                 onComplete: (metrics) => {
+                    gridMetricsCache = metrics;
+                    currentModelSize = metrics.modelSize;
                     adjustCamera(metrics);
                     createTrackSystem({ scene, baseModel, trackPieces, gridMetrics: metrics, unloadBays });
                     player = createPlayer(scene, metrics.modelSize);
@@ -78,7 +82,10 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                                 routeStatus.value = "車輛載入失敗";
                             });
                     }
-                    saveBoxData(boxes, metrics.modelSize);
+                    loadCargoLayout(metrics).catch((error) => {
+                        console.error("✗ 載入後端貨物配置失敗", error);
+                        saveBoxData(boxes, metrics.modelSize);
+                    });
                 }
             });
         });
@@ -128,6 +135,82 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
 
     const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+    async function moveCargoBoxToCoord(carId, cargoBox, targetCoord) {
+        if (!carManager || !cargoBox?.userData?.gridCoord) return false;
+
+        const { x, z } = cargoBox.userData.gridCoord;
+        const moveResult = setCarDestination(carId, `${x}-${z}`);
+        if (!moveResult) return false;
+
+        await waitForCarReady(carId);
+        await pause(350);
+
+        const pickResult = pickUpCargo(carId);
+        if (!pickResult) return false;
+
+        await pause(350);
+
+        setCarDestination(carId, `${targetCoord.x}-${targetCoord.z}`);
+        await waitForCarReady(carId);
+        await pause(350);
+
+        const dropResult = dropCargo(carId);
+        await pause(350);
+
+        return dropResult;
+    }
+
+    function getStackAtCoord(coord) {
+        return boxes.filter((box) => {
+            const gridCoord = box.userData?.gridCoord;
+            return gridCoord && gridCoord.x === coord.x && gridCoord.z === coord.z && !box.userData?.isPicked;
+        }).sort((a, b) => {
+            const ay = a.userData?.gridCoord?.y ?? 0;
+            const by = b.userData?.gridCoord?.y ?? 0;
+            return by - ay;
+        });
+    }
+
+    function getStagingCoords() {
+        if (!gridMetricsCache) return [];
+        const { width, depth } = gridMetricsCache;
+        return [
+            { x: 0, z: depth - 1 },
+            { x: width - 1, z: depth - 1 },
+        ];
+    }
+
+    function getNextAvailableStagingCoord() {
+        const stagingCoords = getStagingCoords();
+        if (!gridMetricsCache || stagingCoords.length === 0) {
+            return { x: 0, z: 0 };
+        }
+
+        let bestCoord = stagingCoords[0];
+        let bestHeight = Number.POSITIVE_INFINITY;
+        stagingCoords.forEach((coord) => {
+            const stackHeight = getStackAtCoord(coord).length;
+            if (stackHeight < bestHeight) {
+                bestHeight = stackHeight;
+                bestCoord = coord;
+            }
+        });
+        return bestCoord;
+    }
+
+    async function clearBlockingCargo(carId, targetBox) {
+        const targetCoord = targetBox.userData?.gridCoord;
+        if (!targetCoord) return;
+
+        let stack = getStackAtCoord(targetCoord);
+        while (stack.length > 0 && stack[0].userData?.boxId !== targetBox.userData?.boxId) {
+            const blockingBox = stack[0];
+            const stagingCoord = getNextAvailableStagingCoord();
+            await moveCargoBoxToCoord(carId, blockingBox, stagingCoord);
+            stack = getStackAtCoord(targetCoord);
+        }
+    }
+
     async function executeOrder({ carId, order, items, shippingTarget }) {
         if (!carId) {
             return { success: false, message: "尚未分配車輛" };
@@ -150,41 +233,23 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                 continue;
             }
 
-            const { x, z } = cargoBox.userData.gridCoord || {};
-            if (x === undefined || z === undefined) {
+            if (!cargoBox.userData?.gridCoord) {
                 executionStatus.value = `商品 ${itemId} 的位置資訊缺失`;
                 continue;
             }
 
-            const moveResult = setCarDestination(carId, `${x}-${z}`);
+            await clearBlockingCargo(carId, cargoBox);
+            const moveResult = await moveCargoBoxToCoord(carId, cargoBox, shippingTarget.coord);
             if (!moveResult) {
-                executionStatus.value = `無法前往商品 ${itemId}`;
-                continue;
-            }
-
-            await waitForCarReady(carId);
-            await pause(350);
-
-            const pickResult = pickUpCargo(carId);
-            if (!pickResult) {
-                executionStatus.value = `商品 ${itemId} 取貨失敗`;
-                continue;
-            }
-
-            await pause(350);
-
-            setCarDestination(carId, `${shippingTarget.coord.x}-${shippingTarget.coord.z}`);
-            await waitForCarReady(carId);
-            await pause(350);
-
-            const dropResult = dropCargo(carId);
-            if (!dropResult) {
                 executionStatus.value = `商品 ${itemId} 卸貨失敗`;
                 continue;
             }
 
-            await pause(350);
             executionStatus.value = `商品 ${itemId} 已送達 ${shippingTarget.label}`;
+        }
+
+        if (currentModelSize) {
+            saveBoxData(boxes, currentModelSize);
         }
 
         return { success: true, message: `訂單 ${order?.id ?? ""} 已完成`.trim() };
@@ -296,6 +361,59 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
             onSuccess: (result) => console.log("✓ 貨物數據已同步", result),
             onError: (error) => console.error("✗ 同步失敗", error),
         });
+    }
+
+    async function loadCargoLayout(metrics) {
+        const response = await fetch("http://localhost:8000/vue/cargo?limit=300");
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        const cargoList = data?.cargo || [];
+
+        if (cargoList.length === 0) {
+            saveBoxData(boxes, metrics.modelSize);
+            return;
+        }
+
+        const cargoMap = new Map();
+        cargoList.forEach((cargo) => {
+            if (!cargo?.id) return;
+            cargoMap.set(cargo.id, cargo);
+        });
+
+        boxes.forEach((box) => {
+            const boxId = box.userData?.boxId;
+            const cargo = cargoMap.get(`case ${boxId}`);
+            if (!cargo?.position) return;
+
+            const position = cargo.position;
+            box.position.set(position.x, position.y, position.z);
+            box.rotation.set(0, 0, 0);
+            if (box.parent !== scene) {
+                scene.attach(box);
+            }
+            box.updateMatrixWorld(true);
+
+            const gridCoord = positionToGridCoord(position, metrics);
+            box.userData.gridCoord = gridCoord;
+            box.userData.isPicked = false;
+            box.userData.attachedToCarId = null;
+            box.userData.originalParent = scene;
+        });
+    }
+
+    function positionToGridCoord(position, metrics) {
+        const { startX, startY, startZ, boxWidth, boxHeight, boxDepth, spacingX, spacingY, spacingZ, modelCenter } = metrics;
+        const xIndex = Math.round((position.x + modelCenter.x - startX) / (boxWidth + spacingX));
+        const zIndex = Math.round((position.z + modelCenter.z - startZ) / (boxDepth + spacingZ));
+        const yIndex = Math.round((position.y + modelCenter.y - startY) / (boxHeight + spacingY));
+
+        return {
+            x: Math.max(0, Math.min(metrics.width - 1, xIndex)),
+            y: Math.max(0, Math.min(metrics.height + 2, yIndex)),
+            z: Math.max(0, Math.min(metrics.depth - 1, zIndex)),
+        };
     }
 
     function setupInput() {
