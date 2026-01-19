@@ -12,6 +12,8 @@ import { setupHoverDetection } from '../utils/hoverDetection';
 
 export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPosition }) {
     let scene, camera, renderer, boxes = [], baseModel = null, trackPieces = [];
+    let currentModelSize = null;
+    let gridMetricsCache = null;
     let player = null, carManager = null;
     let yaw = 0, pitch = -0.3;
     const cameraOffset = new THREE.Vector3(0, 2, 6);
@@ -24,6 +26,8 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
     const destinationXOptions = ref([]);
     const destinationYOptions = ref([]);
     const routeStatus = ref("選擇車輛與目的地後派送");
+    const isExecuting = ref(false);
+    const executionStatus = ref("");
 
     const unloadBays = [
         { cells: ["0-0", "1-0"], protrudeSteps: 1 },
@@ -54,6 +58,8 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                 boxes,
                 unloadAreaCells,
                 onComplete: (metrics) => {
+                    gridMetricsCache = metrics;
+                    currentModelSize = metrics.modelSize;
                     adjustCamera(metrics);
                     createTrackSystem({ scene, baseModel, trackPieces, gridMetrics: metrics, unloadBays });
                     player = createPlayer(scene, metrics.modelSize);
@@ -76,7 +82,10 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                                 routeStatus.value = "車輛載入失敗";
                             });
                     }
-                    saveBoxData(boxes, metrics.modelSize);
+                    loadCargoLayout(metrics).catch((error) => {
+                        console.error("✗ 載入後端貨物配置失敗", error);
+                        saveBoxData(boxes, metrics.modelSize);
+                    });
                 }
             });
         });
@@ -101,6 +110,269 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         const result = carManager.dropCargo(carId);
         routeStatus.value = result.message;
         return result.success;
+    }
+
+    function getDefaultCarId() {
+        return carOptions.value[0]?.id || "";
+    }
+
+    function waitForCarReady(carId) {
+        return new Promise((resolve) => {
+            const checkReady = () => {
+                if (!carManager) {
+                    resolve(false);
+                    return;
+                }
+                if (carManager.isCarReady(carId)) {
+                    resolve(true);
+                } else {
+                    requestAnimationFrame(checkReady);
+                }
+            };
+            checkReady();
+        });
+    }
+
+    const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const pickDropDelay = 650;
+
+    async function moveCargoBoxToCoord(carId, cargoBox, targetCoord) {
+        if (!carManager || !cargoBox?.userData?.gridCoord) return false;
+
+        const { x, z } = cargoBox.userData.gridCoord;
+        const moveResult = setCarDestination(carId, `${x}-${z}`);
+        if (!moveResult) return false;
+
+        await waitForCarReady(carId);
+        await pause(pickDropDelay);
+
+        const pickResult = pickUpCargo(carId);
+        if (!pickResult) return false;
+
+        await pause(pickDropDelay);
+
+        setCarDestination(carId, `${targetCoord.x}-${targetCoord.z}`);
+        await waitForCarReady(carId);
+        await pause(pickDropDelay);
+
+        const dropResult = dropCargo(carId);
+        await pause(pickDropDelay);
+
+        return dropResult;
+    }
+
+    async function moveCargoBoxToCoords(carId, cargoBox, targetCoords = []) {
+        const coords = targetCoords.filter(Boolean);
+        for (const coord of coords) {
+            const moved = await moveCargoBoxToCoord(carId, cargoBox, coord);
+            if (moved) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function getStackAtCoord(coord) {
+        return boxes.filter((box) => {
+            const gridCoord = box.userData?.gridCoord;
+            return gridCoord && gridCoord.x === coord.x && gridCoord.z === coord.z && !box.userData?.isPicked;
+        }).sort((a, b) => {
+            const ay = a.userData?.gridCoord?.y ?? 0;
+            const by = b.userData?.gridCoord?.y ?? 0;
+            return by - ay;
+        });
+    }
+
+    function getNearbyStagingCoords(centerCoord) {
+        if (!gridMetricsCache) return [];
+        const { width, depth } = gridMetricsCache;
+        const offsets = [
+            { x: 1, z: 0 },
+            { x: -1, z: 0 },
+            { x: 0, z: 1 },
+            { x: 0, z: -1 },
+            { x: 1, z: 1 },
+            { x: 1, z: -1 },
+            { x: -1, z: 1 },
+            { x: -1, z: -1 },
+        ];
+
+        return offsets
+            .map((offset) => ({
+                x: Math.max(0, Math.min(width - 1, centerCoord.x + offset.x)),
+                z: Math.max(0, Math.min(depth - 1, centerCoord.z + offset.z)),
+            }))
+            .filter((coord) => coord.x !== centerCoord.x || coord.z !== centerCoord.z);
+    }
+
+    function getNextAvailableStagingCoord(centerCoord) {
+        const stagingCoords = getNearbyStagingCoords(centerCoord);
+        if (!gridMetricsCache || stagingCoords.length === 0) {
+            return { x: centerCoord.x, z: centerCoord.z };
+        }
+
+        let bestCoord = stagingCoords[0];
+        let bestHeight = Number.POSITIVE_INFINITY;
+        stagingCoords.forEach((coord) => {
+            const stackHeight = getStackAtCoord(coord).length;
+            if (stackHeight < bestHeight) {
+                bestHeight = stackHeight;
+                bestCoord = coord;
+            }
+        });
+        return bestCoord;
+    }
+
+    async function clearBlockingCargo(carId, targetBox, orderItemIds, itemAssignments, deliveredItemIds) {
+        const targetCoord = targetBox.userData?.gridCoord;
+        if (!targetCoord) return;
+
+        let stack = getStackAtCoord(targetCoord);
+        while (stack.length > 0 && stack[0].userData?.boxId !== targetBox.userData?.boxId) {
+            const blockingBox = stack[0];
+            const blockingId = blockingBox.userData?.boxId;
+
+            if (orderItemIds?.has(blockingId)) {
+                const assignment = itemAssignments?.get(blockingId);
+                const shippingCoord = assignment?.shippingTarget?.coord;
+                if (shippingCoord) {
+                    await moveCargoBoxToCoords(carId, blockingBox, [shippingCoord]);
+                    deliveredItemIds?.add(blockingId);
+                }
+            } else if (itemAssignments?.has(blockingId)) {
+                const assignment = itemAssignments.get(blockingId);
+                const shippingCoord = assignment?.shippingTarget?.coord;
+                if (shippingCoord) {
+                    await moveCargoBoxToCoords(carId, blockingBox, [shippingCoord]);
+                    deliveredItemIds?.add(blockingId);
+                }
+            } else {
+                const stagingCoord = getNextAvailableStagingCoord(targetCoord);
+                const stagingCoords = [stagingCoord, ...getNearbyStagingCoords(targetCoord)];
+                await moveCargoBoxToCoords(carId, blockingBox, stagingCoords);
+            }
+
+            stack = getStackAtCoord(targetCoord);
+        }
+    }
+
+    async function executeOrder({ carId, order, items, shippingTarget, itemAssignments, deliveredItemIds }) {
+        if (!carId) {
+            return { success: false, message: "尚未分配車輛" };
+        }
+        if (!carManager) {
+            return { success: false, message: "車輛尚未準備完成" };
+        }
+
+        if (!Array.isArray(items) || items.length === 0) {
+            return { success: false, message: "訂單內容為空" };
+        }
+
+        const orderItemIds = new Set(items);
+
+        for (const itemId of items) {
+            if (deliveredItemIds?.has(itemId)) {
+                continue;
+            }
+            const cargoBox = boxes.find((box) => {
+                return box.userData?.boxId === itemId && !box.userData?.isPicked;
+            });
+
+            if (!cargoBox) {
+                executionStatus.value = `找不到商品 ${itemId}`;
+                continue;
+            }
+
+            if (!cargoBox.userData?.gridCoord) {
+                executionStatus.value = `商品 ${itemId} 的位置資訊缺失`;
+                continue;
+            }
+
+            await clearBlockingCargo(carId, cargoBox, orderItemIds, itemAssignments, deliveredItemIds);
+            const moveResult = await moveCargoBoxToCoords(carId, cargoBox, [shippingTarget.coord]);
+            if (!moveResult) {
+                executionStatus.value = `商品 ${itemId} 卸貨失敗`;
+                continue;
+            }
+
+            deliveredItemIds?.add(itemId);
+            executionStatus.value = `商品 ${itemId} 已送達 ${shippingTarget.label}`;
+        }
+
+        if (currentModelSize) {
+            saveBoxData(boxes, currentModelSize);
+        }
+
+        return { success: true, message: `訂單 ${order?.id ?? ""} 已完成`.trim() };
+    }
+
+    async function executeOrders(orderTasks = []) {
+        if (isExecuting.value) {
+            executionStatus.value = "目前已有訂單執行中，請稍候";
+            return { success: false, message: executionStatus.value };
+        }
+
+        const carIds = carOptions.value.slice(0, 2).map((car) => car.id);
+        if (!carManager || carIds.length === 0) {
+            executionStatus.value = "車輛尚未準備完成";
+            return { success: false, message: executionStatus.value };
+        }
+
+        const shippingTargets = [
+            { label: "X1Y1", coord: { x: 0, z: 0 } },
+            { label: "X4Y1", coord: { x: 3, z: 0 } },
+        ];
+
+        isExecuting.value = true;
+        executionStatus.value = "開始執行訂單";
+
+        try {
+            const deliveredItemIds = new Set();
+            const itemAssignments = new Map();
+
+            const taskConfigs = orderTasks.slice(0, 2).map((task, index) => {
+                const shippingTarget = shippingTargets[index % shippingTargets.length];
+                const carId = carIds[index % carIds.length] || getDefaultCarId();
+                (task.items || []).forEach((itemId) => {
+                    itemAssignments.set(itemId, {
+                        orderId: task.order?.id,
+                        shippingTarget,
+                    });
+                });
+                executionStatus.value = `分配 ${task.order?.id ?? ""} -> ${shippingTarget.label}`.trim();
+                return {
+                    carId,
+                    order: task.order,
+                    items: task.items,
+                    shippingTarget,
+                };
+            });
+
+            const tasks = taskConfigs.map((config) => executeOrder({
+                ...config,
+                itemAssignments,
+                deliveredItemIds,
+            }));
+
+            const results = await Promise.all(tasks);
+            const completedOrderIds = orderTasks
+                .slice(0, results.length)
+                .filter((_, index) => results[index]?.success)
+                .map((task) => task.order?.id)
+                .filter(Boolean);
+
+            if (completedOrderIds.length > 0) {
+                executionStatus.value = `訂單 ${completedOrderIds.join(", ")} 已完成`;
+            }
+
+            return {
+                success: completedOrderIds.length > 0,
+                message: executionStatus.value,
+                completedOrderIds,
+            };
+        } finally {
+            isExecuting.value = false;
+        }
     }
 
     function processModel(originalScene) {
@@ -155,6 +427,59 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
             onSuccess: (result) => console.log("✓ 貨物數據已同步", result),
             onError: (error) => console.error("✗ 同步失敗", error),
         });
+    }
+
+    async function loadCargoLayout(metrics) {
+        const response = await fetch("http://localhost:8000/vue/cargo?limit=300");
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        const cargoList = data?.cargo || [];
+
+        if (cargoList.length === 0) {
+            saveBoxData(boxes, metrics.modelSize);
+            return;
+        }
+
+        const cargoMap = new Map();
+        cargoList.forEach((cargo) => {
+            if (!cargo?.id) return;
+            cargoMap.set(cargo.id, cargo);
+        });
+
+        boxes.forEach((box) => {
+            const boxId = box.userData?.boxId;
+            const cargo = cargoMap.get(`case ${boxId}`);
+            if (!cargo?.position) return;
+
+            const position = cargo.position;
+            box.position.set(position.x, position.y, position.z);
+            box.rotation.set(0, 0, 0);
+            if (box.parent !== scene) {
+                scene.attach(box);
+            }
+            box.updateMatrixWorld(true);
+
+            const gridCoord = positionToGridCoord(position, metrics);
+            box.userData.gridCoord = gridCoord;
+            box.userData.isPicked = false;
+            box.userData.attachedToCarId = null;
+            box.userData.originalParent = scene;
+        });
+    }
+
+    function positionToGridCoord(position, metrics) {
+        const { startX, startY, startZ, boxWidth, boxHeight, boxDepth, spacingX, spacingY, spacingZ, modelCenter } = metrics;
+        const xIndex = Math.round((position.x + modelCenter.x - startX) / (boxWidth + spacingX));
+        const zIndex = Math.round((position.z + modelCenter.z - startZ) / (boxDepth + spacingZ));
+        const yIndex = Math.round((position.y + modelCenter.y - startY) / (boxHeight + spacingY));
+
+        return {
+            x: Math.max(0, Math.min(metrics.width - 1, xIndex)),
+            y: Math.max(0, Math.min(metrics.height + 2, yIndex)),
+            z: Math.max(0, Math.min(metrics.depth - 1, zIndex)),
+        };
     }
 
     function setupInput() {
@@ -284,6 +609,31 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         renderer?.dispose();
     }
 
+    function resetWarehouse() {
+        if (!scene) return;
+        boxes.forEach((box) => {
+            const defaultPosition = box.userData?.defaultPosition;
+            const defaultGridCoord = box.userData?.defaultGridCoord;
+            if (!defaultPosition || !defaultGridCoord) return;
+
+            if (box.parent !== scene) {
+                scene.attach(box);
+            }
+            box.position.copy(defaultPosition);
+            box.rotation.set(0, 0, 0);
+            box.updateMatrixWorld(true);
+
+            box.userData.gridCoord = { ...defaultGridCoord };
+            box.userData.isPicked = false;
+            box.userData.attachedToCarId = null;
+            box.userData.originalParent = scene;
+        });
+
+        if (currentModelSize) {
+            saveBoxData(boxes, currentModelSize);
+        }
+    }
+
     return {
         init,
         cleanup,
@@ -291,8 +641,12 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         destinationXOptions,
         destinationYOptions,
         routeStatus,
+        isExecuting,
+        executionStatus,
         setCarDestination,
         pickUpCargo,
         dropCargo,
+        executeOrders,
+        resetWarehouse,
     };
 }

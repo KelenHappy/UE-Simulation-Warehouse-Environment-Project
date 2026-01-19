@@ -167,6 +167,10 @@ export function useWebSocket() {
     orderCounter.value = 1
   }
 
+  const removeLocalOrder = (orderId) => {
+    orders.value = orders.value.filter(order => order.id !== orderId)
+  }
+
   return {
     isConnected,
     errorMessage,
@@ -181,6 +185,7 @@ export function useWebSocket() {
     requestClearOrders,
     requestDeleteOrder,
     addLocalOrder,
-    clearLocalOrders
+    clearLocalOrders,
+    removeLocalOrder
   }
 }

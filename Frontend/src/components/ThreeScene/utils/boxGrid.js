@@ -55,10 +55,13 @@ export function createBoxGrid({ scene, baseModel, boxes, unloadAreaCells, onComp
                 );
                 
                 const boxId = boxes.length + 1;
+                const defaultPosition = clonedModel.position.clone();
                 clonedModel.userData = {
                     boxId,
                     productName: `商品 ${boxId}`,
                     gridCoord: { x, y, z },
+                    defaultGridCoord: { x, y, z },
+                    defaultPosition,
                     isPicked: false,
                     originalScale: clonedModel.scale.clone(),
                     originalWorldScale: (() => {
