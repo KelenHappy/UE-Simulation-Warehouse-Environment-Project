@@ -205,6 +205,20 @@ export class CarManager {
         }));
     }
 
+    getCarById(carId) {
+        return this.cars.find(car => car.id === carId);
+    }
+
+    isCarReady(carId) {
+        const car = this.getCarById(carId);
+        return this.isCarReadyForAction(car);
+    }
+
+    hasCargo(carId) {
+        const car = this.getCarById(carId);
+        return Boolean(car?.cargo);
+    }
+
     getDestinationOptions() {
         if (!this.gridMetrics) return [];
         const options = [];

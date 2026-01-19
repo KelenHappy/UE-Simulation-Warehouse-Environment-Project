@@ -24,6 +24,8 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
     const destinationXOptions = ref([]);
     const destinationYOptions = ref([]);
     const routeStatus = ref("選擇車輛與目的地後派送");
+    const isExecuting = ref(false);
+    const executionStatus = ref("");
 
     const unloadBays = [
         { cells: ["0-0", "1-0"], protrudeSteps: 1 },
@@ -101,6 +103,105 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         const result = carManager.dropCargo(carId);
         routeStatus.value = result.message;
         return result.success;
+    }
+
+    function getDefaultCarId() {
+        return carOptions.value[0]?.id || "";
+    }
+
+    function waitForCarReady(carId) {
+        return new Promise((resolve) => {
+            const checkReady = () => {
+                if (!carManager) {
+                    resolve(false);
+                    return;
+                }
+                if (carManager.isCarReady(carId)) {
+                    resolve(true);
+                } else {
+                    requestAnimationFrame(checkReady);
+                }
+            };
+            checkReady();
+        });
+    }
+
+    async function executeOrder({ order, items }) {
+        if (isExecuting.value) {
+            executionStatus.value = "目前已有訂單執行中，請稍候";
+            return { success: false, message: executionStatus.value };
+        }
+
+        const carId = getDefaultCarId();
+        if (!carManager || !carId) {
+            executionStatus.value = "車輛尚未準備完成";
+            return { success: false, message: executionStatus.value };
+        }
+
+        if (!Array.isArray(items) || items.length === 0) {
+            executionStatus.value = "訂單內容為空";
+            return { success: false, message: executionStatus.value };
+        }
+
+        const shippingTargets = [
+            { label: "X1Y1", coord: { x: 0, z: 0 } },
+            { label: "X4Y1", coord: { x: 3, z: 0 } },
+        ];
+
+        isExecuting.value = true;
+        executionStatus.value = `開始執行訂單 ${order?.id ?? ""}`.trim();
+
+        try {
+            let targetIndex = 0;
+            for (const itemId of items) {
+                const cargoBox = boxes.find((box) => {
+                    return box.userData?.boxId === itemId && !box.userData?.isPicked;
+                });
+
+                if (!cargoBox) {
+                    executionStatus.value = `找不到商品 ${itemId}`;
+                    continue;
+                }
+
+                const { x, z } = cargoBox.userData.gridCoord || {};
+                if (x === undefined || z === undefined) {
+                    executionStatus.value = `商品 ${itemId} 的位置資訊缺失`;
+                    continue;
+                }
+
+                const moveResult = setCarDestination(carId, `${x}-${z}`);
+                if (!moveResult) {
+                    executionStatus.value = `無法前往商品 ${itemId}`;
+                    continue;
+                }
+
+                await waitForCarReady(carId);
+
+                const pickResult = pickUpCargo(carId);
+                if (!pickResult) {
+                    executionStatus.value = `商品 ${itemId} 取貨失敗`;
+                    continue;
+                }
+
+                const shippingTarget = shippingTargets[targetIndex % shippingTargets.length];
+                targetIndex += 1;
+                setCarDestination(carId, `${shippingTarget.coord.x}-${shippingTarget.coord.z}`);
+                await waitForCarReady(carId);
+
+                const dropResult = dropCargo(carId);
+                if (!dropResult) {
+                    executionStatus.value = `商品 ${itemId} 卸貨失敗`;
+                    continue;
+                }
+
+                executionStatus.value = `商品 ${itemId} 已送達 ${shippingTarget.label}`;
+            }
+
+            executionStatus.value = `訂單 ${order?.id ?? ""} 已完成`.trim();
+            return { success: true, message: executionStatus.value };
+        } finally {
+            isExecuting.value = false;
+        }
     }
 
     function processModel(originalScene) {
@@ -291,8 +392,11 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         destinationXOptions,
         destinationYOptions,
         routeStatus,
+        isExecuting,
+        executionStatus,
         setCarDestination,
         pickUpCargo,
         dropCargo,
+        executeOrder,
     };
 }
