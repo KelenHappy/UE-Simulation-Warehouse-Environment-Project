@@ -134,6 +134,7 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
     }
 
     const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const pickDropDelay = 650;
 
     async function moveCargoBoxToCoord(carId, cargoBox, targetCoord) {
         if (!carManager || !cargoBox?.userData?.gridCoord) return false;
@@ -143,19 +144,19 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         if (!moveResult) return false;
 
         await waitForCarReady(carId);
-        await pause(350);
+        await pause(pickDropDelay);
 
         const pickResult = pickUpCargo(carId);
         if (!pickResult) return false;
 
-        await pause(350);
+        await pause(pickDropDelay);
 
         setCarDestination(carId, `${targetCoord.x}-${targetCoord.z}`);
         await waitForCarReady(carId);
-        await pause(350);
+        await pause(pickDropDelay);
 
         const dropResult = dropCargo(carId);
-        await pause(350);
+        await pause(pickDropDelay);
 
         return dropResult;
     }
