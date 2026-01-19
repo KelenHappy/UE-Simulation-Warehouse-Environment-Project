@@ -52,6 +52,7 @@ const {
     pickUpCargo,
     dropCargo,
     executeOrders,
+    resetWarehouse,
 } = useThreeScene({
     container,
     moveSpeed,
@@ -127,6 +128,7 @@ defineExpose({
     startOrderExecution,
     isExecuting,
     executionStatus,
+    resetWarehouse,
 });
 </script>
 

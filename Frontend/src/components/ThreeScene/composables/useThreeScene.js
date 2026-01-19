@@ -160,6 +160,17 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         return dropResult;
     }
 
+    async function moveCargoBoxToCoords(carId, cargoBox, targetCoords = []) {
+        const coords = targetCoords.filter(Boolean);
+        for (const coord of coords) {
+            const moved = await moveCargoBoxToCoord(carId, cargoBox, coord);
+            if (moved) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function getStackAtCoord(coord) {
         return boxes.filter((box) => {
             const gridCoord = box.userData?.gridCoord;
@@ -211,7 +222,7 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         return bestCoord;
     }
 
-    async function clearBlockingCargo(carId, targetBox, orderItemIds, shippingTarget) {
+    async function clearBlockingCargo(carId, targetBox, orderItemIds, itemAssignments, deliveredItemIds) {
         const targetCoord = targetBox.userData?.gridCoord;
         if (!targetCoord) return;
 
@@ -221,17 +232,30 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
             const blockingId = blockingBox.userData?.boxId;
 
             if (orderItemIds?.has(blockingId)) {
-                await moveCargoBoxToCoord(carId, blockingBox, shippingTarget.coord);
+                const assignment = itemAssignments?.get(blockingId);
+                const shippingCoord = assignment?.shippingTarget?.coord;
+                if (shippingCoord) {
+                    await moveCargoBoxToCoords(carId, blockingBox, [shippingCoord]);
+                    deliveredItemIds?.add(blockingId);
+                }
+            } else if (itemAssignments?.has(blockingId)) {
+                const assignment = itemAssignments.get(blockingId);
+                const shippingCoord = assignment?.shippingTarget?.coord;
+                if (shippingCoord) {
+                    await moveCargoBoxToCoords(carId, blockingBox, [shippingCoord]);
+                    deliveredItemIds?.add(blockingId);
+                }
             } else {
                 const stagingCoord = getNextAvailableStagingCoord(targetCoord);
-                await moveCargoBoxToCoord(carId, blockingBox, stagingCoord);
+                const stagingCoords = [stagingCoord, ...getNearbyStagingCoords(targetCoord)];
+                await moveCargoBoxToCoords(carId, blockingBox, stagingCoords);
             }
 
             stack = getStackAtCoord(targetCoord);
         }
     }
 
-    async function executeOrder({ carId, order, items, shippingTarget }) {
+    async function executeOrder({ carId, order, items, shippingTarget, itemAssignments, deliveredItemIds }) {
         if (!carId) {
             return { success: false, message: "尚未分配車輛" };
         }
@@ -246,6 +270,9 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         const orderItemIds = new Set(items);
 
         for (const itemId of items) {
+            if (deliveredItemIds?.has(itemId)) {
+                continue;
+            }
             const cargoBox = boxes.find((box) => {
                 return box.userData?.boxId === itemId && !box.userData?.isPicked;
             });
@@ -260,13 +287,14 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                 continue;
             }
 
-            await clearBlockingCargo(carId, cargoBox, orderItemIds, shippingTarget);
-            const moveResult = await moveCargoBoxToCoord(carId, cargoBox, shippingTarget.coord);
+            await clearBlockingCargo(carId, cargoBox, orderItemIds, itemAssignments, deliveredItemIds);
+            const moveResult = await moveCargoBoxToCoords(carId, cargoBox, [shippingTarget.coord]);
             if (!moveResult) {
                 executionStatus.value = `商品 ${itemId} 卸貨失敗`;
                 continue;
             }
 
+            deliveredItemIds?.add(itemId);
             executionStatus.value = `商品 ${itemId} 已送達 ${shippingTarget.label}`;
         }
 
@@ -298,17 +326,32 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         executionStatus.value = "開始執行訂單";
 
         try {
-            const tasks = orderTasks.slice(0, 2).map((task, index) => {
+            const deliveredItemIds = new Set();
+            const itemAssignments = new Map();
+
+            const taskConfigs = orderTasks.slice(0, 2).map((task, index) => {
                 const shippingTarget = shippingTargets[index % shippingTargets.length];
                 const carId = carIds[index % carIds.length] || getDefaultCarId();
+                (task.items || []).forEach((itemId) => {
+                    itemAssignments.set(itemId, {
+                        orderId: task.order?.id,
+                        shippingTarget,
+                    });
+                });
                 executionStatus.value = `分配 ${task.order?.id ?? ""} -> ${shippingTarget.label}`.trim();
-                return executeOrder({
+                return {
                     carId,
                     order: task.order,
                     items: task.items,
                     shippingTarget,
-                });
+                };
             });
+
+            const tasks = taskConfigs.map((config) => executeOrder({
+                ...config,
+                itemAssignments,
+                deliveredItemIds,
+            }));
 
             const results = await Promise.all(tasks);
             const completedOrderIds = orderTasks
@@ -565,6 +608,31 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         renderer?.dispose();
     }
 
+    function resetWarehouse() {
+        if (!scene) return;
+        boxes.forEach((box) => {
+            const defaultPosition = box.userData?.defaultPosition;
+            const defaultGridCoord = box.userData?.defaultGridCoord;
+            if (!defaultPosition || !defaultGridCoord) return;
+
+            if (box.parent !== scene) {
+                scene.attach(box);
+            }
+            box.position.copy(defaultPosition);
+            box.rotation.set(0, 0, 0);
+            box.updateMatrixWorld(true);
+
+            box.userData.gridCoord = { ...defaultGridCoord };
+            box.userData.isPicked = false;
+            box.userData.attachedToCarId = null;
+            box.userData.originalParent = scene;
+        });
+
+        if (currentModelSize) {
+            saveBoxData(boxes, currentModelSize);
+        }
+    }
+
     return {
         init,
         cleanup,
@@ -578,5 +646,6 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
         pickUpCargo,
         dropCargo,
         executeOrders,
+        resetWarehouse,
     };
 }
