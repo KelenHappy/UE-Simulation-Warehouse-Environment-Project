@@ -63,8 +63,18 @@ export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
   }
 
   const generateRandom = () => {
-    if (numbers.value.length === 0) return
-    numbers.value = [...numbers.value].sort(() => Math.random() - 0.5)
+    const count = numbers.value.length
+    if (count === 0) return
+
+    const targetCount = Math.min(count, maxBoxId)
+    const usedNumbers = new Set()
+
+    while (usedNumbers.size < targetCount) {
+      const randomNum = Math.floor(Math.random() * maxBoxId) + 1
+      usedNumbers.add(randomNum)
+    }
+
+    numbers.value = Array.from(usedNumbers)
   }
 
   const applyCodeInput = (codeInput) => {
