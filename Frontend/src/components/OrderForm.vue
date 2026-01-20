@@ -37,6 +37,34 @@
     </div>
 
     <div class="mb-6">
+      <label class="block text-sm font-medium text-gray-700 mb-2">代碼輸入</label>
+      <div class="flex flex-col gap-3">
+        <div class="flex flex-wrap gap-2">
+          <input
+            v-model="codeInput"
+            type="text"
+            class="flex-1 min-w-[220px] px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            placeholder="例如 60-70-80-90"
+          />
+          <button
+            @click="applyCode(codeInput)"
+            class="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-all duration-300 font-medium"
+          >
+            套用代碼
+          </button>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button
+            @click="applyCode('60-70-80-90')"
+            class="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-all duration-300 font-medium"
+          >
+            快速 60-70-80-90
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-6">
       <label class="block text-sm font-medium text-gray-700 mb-2">訂單預覽</label>
       <div class="p-4 bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl text-center">
         <div class="text-2xl font-mono font-bold text-blue-700">
@@ -89,6 +117,8 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+
 defineProps({
   numbers: {
     type: Array,
@@ -100,7 +130,7 @@ defineProps({
   }
 })
 
-defineEmits([
+const emit = defineEmits([
   'add-number',
   'update-number',
   'remove-number',
@@ -108,6 +138,15 @@ defineEmits([
   'add-multiple',
   'validate-number',
   'generate-random',
+  'apply-code',
   'submit-order'
 ])
+
+const codeInput = ref('')
+
+const applyCode = (value) => {
+  if (!value) return
+  emit('apply-code', value)
+  codeInput.value = ''
+}
 </script>

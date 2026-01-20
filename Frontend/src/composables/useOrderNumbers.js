@@ -2,6 +2,7 @@ import { ref, computed, watch } from 'vue'
 
 export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
   const numbers = ref([...initialNumbers])
+  const randomPool = ref([...initialNumbers])
 
   watch(numbers, (newNumbers) => {
     const uniqueNumbers = [...new Set(newNumbers)]
@@ -16,9 +17,9 @@ export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
   })
 
   const addNumber = () => {
-    if (!numbers.value.includes(0)) {
-      numbers.value.push(0)
-    }
+    const lastNumber = numbers.value[numbers.value.length - 1]
+    const nextNumber = lastNumber ? Math.min(lastNumber + 1, 999) : 1
+    numbers.value.push(nextNumber)
   }
 
   const updateNumber = (index, value) => {
@@ -34,11 +35,20 @@ export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
   }
 
   const addMultipleNumbers = (count) => {
-    for (let i = 0; i < count; i++) {
-      if (!numbers.value.includes(0)) {
-        numbers.value.push(0)
+    const existing = new Set(numbers.value)
+    const addedNumbers = []
+    let attempts = 0
+
+    while (addedNumbers.length < count && attempts < 2000) {
+      const randomNum = Math.floor(Math.random() * 999) + 1
+      if (!existing.has(randomNum)) {
+        existing.add(randomNum)
+        addedNumbers.push(randomNum)
       }
+      attempts += 1
     }
+
+    numbers.value.push(...addedNumbers)
   }
 
   const validateNumber = (index) => {
@@ -51,19 +61,37 @@ export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
   }
 
   const generateRandom = () => {
-    const count = Math.floor(Math.random() * 5) + 3
-    const usedNumbers = new Set()
-
-    while (usedNumbers.size < count) {
-      const randomNum = Math.floor(Math.random() * 230) + 1
-      usedNumbers.add(randomNum)
+    const pool = randomPool.value.length > 0 ? randomPool.value : numbers.value
+    if (pool.length === 0) {
+      numbers.value = []
+      return
     }
 
-    numbers.value = Array.from(usedNumbers)
+    const maxCount = Math.min(pool.length, 7)
+    const minCount = Math.min(3, maxCount)
+    const count = Math.floor(Math.random() * (maxCount - minCount + 1)) + minCount
+    const shuffled = [...pool].sort(() => Math.random() - 0.5)
+    numbers.value = shuffled.slice(0, count)
+  }
+
+  const applyCodeInput = (codeInput) => {
+    const parts = codeInput
+      .split(/[\s,\-]+/)
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value >= 1 && value <= 999)
+
+    if (parts.length === 0) {
+      return
+    }
+
+    const uniqueNumbers = [...new Set(parts)]
+    numbers.value = uniqueNumbers
+    randomPool.value = uniqueNumbers
   }
 
   const setNumbers = (newNumbers) => {
     numbers.value = [...newNumbers]
+    randomPool.value = [...newNumbers]
   }
 
   return {
@@ -76,6 +104,7 @@ export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
     addMultipleNumbers,
     validateNumber,
     generateRandom,
-    setNumbers
+    setNumbers,
+    applyCodeInput
   }
 }
