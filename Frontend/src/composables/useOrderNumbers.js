@@ -1,8 +1,10 @@
 import { ref, computed, watch } from 'vue'
+import { getMaxBoxId } from '../utils/warehouseConfig'
 
 export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
   const numbers = ref([...initialNumbers])
   const randomPool = ref([...initialNumbers])
+  const maxBoxId = getMaxBoxId()
 
   watch(numbers, (newNumbers) => {
     const uniqueNumbers = [...new Set(newNumbers)]
@@ -18,7 +20,7 @@ export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
 
   const addNumber = () => {
     const lastNumber = numbers.value[numbers.value.length - 1]
-    const nextNumber = lastNumber ? Math.min(lastNumber + 1, 999) : 1
+    const nextNumber = lastNumber ? Math.min(lastNumber + 1, maxBoxId) : 1
     numbers.value.push(nextNumber)
   }
 
@@ -40,7 +42,7 @@ export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
     let attempts = 0
 
     while (addedNumbers.length < count && attempts < 2000) {
-      const randomNum = Math.floor(Math.random() * 999) + 1
+      const randomNum = Math.floor(Math.random() * maxBoxId) + 1
       if (!existing.has(randomNum)) {
         existing.add(randomNum)
         addedNumbers.push(randomNum)
@@ -55,8 +57,8 @@ export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
     const num = numbers.value[index]
     if (num < 1) {
       numbers.value[index] = 1
-    } else if (num > 999) {
-      numbers.value[index] = 999
+    } else if (num > maxBoxId) {
+      numbers.value[index] = maxBoxId
     }
   }
 
@@ -78,7 +80,7 @@ export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
     const parts = codeInput
       .split(/[\s,\-]+/)
       .map((value) => Number(value))
-      .filter((value) => Number.isInteger(value) && value >= 1 && value <= 999)
+      .filter((value) => Number.isInteger(value) && value >= 1 && value <= maxBoxId)
 
     if (parts.length === 0) {
       return

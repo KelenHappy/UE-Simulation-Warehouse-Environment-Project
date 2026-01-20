@@ -9,6 +9,7 @@ import { createTrackSystem } from '../utils/trackSystem';
 import { createPlayer } from '../utils/player';
 import { setupInputHandlers } from '../utils/inputHandlers';
 import { setupHoverDetection } from '../utils/hoverDetection';
+import { unloadBays, unloadAreaCells } from '../../../utils/warehouseConfig.js';
 
 export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPosition }) {
     let scene, camera, renderer, boxes = [], baseModel = null, trackPieces = [];
@@ -29,11 +30,7 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
     const isExecuting = ref(false);
     const executionStatus = ref("");
 
-    const unloadBays = [
-        { cells: ["0-0", "1-0"], protrudeSteps: 1 },
-        { cells: ["3-0", "4-0"], protrudeSteps: 1 },
-    ];
-    const unloadAreaCells = new Set(unloadBays.flatMap((bay) => bay.cells));
+    const unloadBaysConfig = unloadBays;
 
     function init() {
         const sceneData = createScene(container.value);
@@ -61,7 +58,7 @@ export function useThreeScene({ container, moveSpeed, hoveredBoxInfo, tooltipPos
                     gridMetricsCache = metrics;
                     currentModelSize = metrics.modelSize;
                     adjustCamera(metrics);
-                    createTrackSystem({ scene, baseModel, trackPieces, gridMetrics: metrics, unloadBays });
+                    createTrackSystem({ scene, baseModel, trackPieces, gridMetrics: metrics, unloadBays: unloadBaysConfig });
                     player = createPlayer(scene, metrics.modelSize);
                     if (carManager) {
                         carManager.setCargoBoxes(boxes);
