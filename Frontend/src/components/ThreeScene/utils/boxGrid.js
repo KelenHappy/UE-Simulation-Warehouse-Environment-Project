@@ -1,7 +1,8 @@
 import * as THREE from "three";
+import { warehouseGrid } from "../../../utils/warehouseConfig";
 
 export function createBoxGrid({ scene, baseModel, boxes, unloadAreaCells, onComplete }) {
-    const width = 5, depth = 10, height = 5;
+    const { width, depth, height } = warehouseGrid;
     
     const finalBox = new THREE.Box3().setFromObject(baseModel);
     const modelSize = finalBox.getSize(new THREE.Vector3());
