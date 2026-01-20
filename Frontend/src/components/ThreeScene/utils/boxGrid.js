@@ -1,7 +1,8 @@
 import * as THREE from "three";
+import { warehouseGrid } from "../../../utils/warehouseConfig";
 
 export function createBoxGrid({ scene, baseModel, boxes, unloadAreaCells, onComplete }) {
-    const width = 5, depth = 10, height = 5;
+    const { width, depth, height } = warehouseGrid;
     
     const finalBox = new THREE.Box3().setFromObject(baseModel);
     const modelSize = finalBox.getSize(new THREE.Vector3());
@@ -55,10 +56,13 @@ export function createBoxGrid({ scene, baseModel, boxes, unloadAreaCells, onComp
                 );
                 
                 const boxId = boxes.length + 1;
+                const defaultPosition = clonedModel.position.clone();
                 clonedModel.userData = {
                     boxId,
                     productName: `商品 ${boxId}`,
                     gridCoord: { x, y, z },
+                    defaultGridCoord: { x, y, z },
+                    defaultPosition,
                     isPicked: false,
                     originalScale: clonedModel.scale.clone(),
                     originalWorldScale: (() => {

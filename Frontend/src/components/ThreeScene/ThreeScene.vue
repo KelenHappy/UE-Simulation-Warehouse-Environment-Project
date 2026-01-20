@@ -46,9 +46,13 @@ const {
     destinationXOptions,
     destinationYOptions,
     routeStatus,
+    isExecuting,
+    executionStatus,
     setCarDestination,
     pickUpCargo,
     dropCargo,
+    executeOrders,
+    resetWarehouse,
 } = useThreeScene({
     container,
     moveSpeed,
@@ -114,6 +118,17 @@ onMounted(() => {
 
 onUnmounted(() => {
     cleanup();
+});
+
+const startOrderExecution = async (orderTasks) => {
+    return executeOrders(orderTasks);
+};
+
+defineExpose({
+    startOrderExecution,
+    isExecuting,
+    executionStatus,
+    resetWarehouse,
 });
 </script>
 

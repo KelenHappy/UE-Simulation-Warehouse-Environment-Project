@@ -25,6 +25,7 @@
           @add-multiple="addMultipleNumbers"
           @validate-number="validateNumber"
           @generate-random="generateRandom"
+          @apply-code="handleApplyCode"
           @submit-order="submitOrder"
         />
       </div>
@@ -49,7 +50,8 @@ const {
   clearNumbers,
   addMultipleNumbers,
   validateNumber,
-  generateRandom
+  generateRandom,
+  applyCodeInput
 } = useOrderNumbers()
 
 const {
@@ -107,6 +109,10 @@ const handleDeleteOrder = (orderId) => {
 
 const handleUpdateNumber = (index, value) => {
   updateNumber(index, value)
+}
+
+const handleApplyCode = (value) => {
+  applyCodeInput(value)
 }
 
 onMounted(() => {
