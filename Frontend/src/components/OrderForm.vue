@@ -70,7 +70,7 @@
         @click="$emit('generate-random')"
         class="px-6 py-4 bg-gradient-to-r from-orange-500 to-yellow-500 text-white rounded-xl hover:from-orange-600 hover:to-yellow-600 transition-all duration-300 transform hover:scale-105 shadow-lg font-bold text-lg"
       >
-        🎲 隨機生成
+        🎲 隨機數字
       </button>
 
       <button

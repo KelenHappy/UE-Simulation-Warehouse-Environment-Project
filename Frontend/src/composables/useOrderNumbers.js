@@ -63,17 +63,8 @@ export function useOrderNumbers(initialNumbers = [10, 20, 30]) {
   }
 
   const generateRandom = () => {
-    const pool = randomPool.value.length > 0 ? randomPool.value : numbers.value
-    if (pool.length === 0) {
-      numbers.value = []
-      return
-    }
-
-    const maxCount = Math.min(pool.length, 7)
-    const minCount = Math.min(3, maxCount)
-    const count = Math.floor(Math.random() * (maxCount - minCount + 1)) + minCount
-    const shuffled = [...pool].sort(() => Math.random() - 0.5)
-    numbers.value = shuffled.slice(0, count)
+    if (numbers.value.length === 0) return
+    numbers.value = [...numbers.value].sort(() => Math.random() - 0.5)
   }
 
   const applyCodeInput = (codeInput) => {
